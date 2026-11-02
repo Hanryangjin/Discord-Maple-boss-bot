@@ -15,7 +15,9 @@ class Database:
             conn = self.connect()
             try:
                 conn.execute('PRAGMA journal_mode=WAL')
-                conn.executescript(Path(__file__).with_name('schema.sql').read_text())
+                conn.executescript(
+                    Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
+                )
             finally:
                 conn.close()
 
@@ -43,7 +45,9 @@ class Database:
         conn.execute('INSERT OR IGNORE INTO guild_settings(guild_id) VALUES(?)', (guild_id,))
         settings = conn.execute('SELECT * FROM guild_settings WHERE guild_id=?', (guild_id,)).fetchone()
         if not settings['initialized']:
-            names = json.loads(Path(__file__).with_name('jobs.json').read_text())['jobs']
+            names = json.loads(
+                Path(__file__).with_name("jobs.json").read_text(encoding="utf-8")
+            )["jobs"]
             from .validation import key
             conn.executemany('INSERT INTO jobs(guild_id,name,name_key) VALUES(?,?,?)',
                              [(guild_id, n, key(n)) for n in names])
