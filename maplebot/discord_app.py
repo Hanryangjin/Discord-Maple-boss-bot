@@ -118,15 +118,11 @@ class DiscordTransport:
         except discord.Forbidden as e:
             raise PermissionError('channel forbidden') from e
 
-    def embed(self, body, marker):
-        embed = discord.Embed(**body, color=0x65AD86)
-        embed.set_footer(text=marker)
-        return embed
-
     async def send(self, channel_id, body, marker):
         try:
             channel = await self.channel(channel_id)
-            message = await channel.send(embed=self.embed(body, marker), allowed_mentions=discord.AllowedMentions.none(), view=BoardView(self.bot))
+            from .public_ui import board_layout
+            message = await channel.send(allowed_mentions=discord.AllowedMentions.none(), view=board_layout(self.bot,body,marker))
             return message.id
         except discord.Forbidden as e:
             raise PermissionError('send forbidden') from e
@@ -137,8 +133,9 @@ class DiscordTransport:
             message = await channel.fetch_message(mid)
             if message.author.id != self.bot.user.id:
                 raise PermissionError('message owner mismatch')
-            await message.edit(embed=self.embed(body, marker), content=None,
-                               allowed_mentions=discord.AllowedMentions.none(), view=None if marker=='maple:retired' else BoardView(self.bot))
+            from .public_ui import board_layout
+            await message.edit(content=None, embeds=[],
+                               allowed_mentions=discord.AllowedMentions.none(), view=board_layout(self.bot,body,marker))
             return True
         except discord.NotFound:
             return False
@@ -160,26 +157,27 @@ class DiscordTransport:
             return  # Deleted channel implies deleted messages.
 
     async def scan(self, channel_id, guild_id):
+        from .public_ui import message_marker, parse_marker
         channel = await self.channel(channel_id)
         found = []
         try:
             async for message in channel.history(limit=100):
-                if message.author.id != self.bot.user.id or not message.embeds:
+                if message.author.id != self.bot.user.id:
                     continue
-                marker = message.embeds[0].footer.text or ''
-                parts = marker.split(':')
-                if len(parts)==5 and parts[0]=='maple' and all(x.isdecimal() for x in parts[1:]) and int(parts[1])==guild_id:
-                    found.append((int(parts[2]),int(parts[3]),int(parts[4]),message.id))
+                identity=parse_marker(message_marker(message) or '')
+                if identity and identity[0]==guild_id:
+                    found.append((*identity[1:],message.id))
         except discord.Forbidden as e:
             raise PermissionError('history forbidden') from e
         return found
 
     async def find(self, channel_id, marker):
+        from .public_ui import message_marker
         channel = await self.channel(channel_id)
         try:
             found = []
             async for message in channel.history(limit=100):
-                if message.author.id == self.bot.user.id and message.embeds and message.embeds[0].footer.text == marker:
+                if message.author.id == self.bot.user.id and message_marker(message)==marker:
                     found.append(message.id)
             if found:
                 for duplicate in found[1:]:
@@ -220,11 +218,15 @@ class MapleBot(commands.Bot):
         self.worker = BoardWorker(self.service, DiscordTransport(self))
         self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False)
         self.tree.allowed_installs = app_commands.AppInstallationType(guild=True, user=False)
+        self.panel_sessions = {}
+        self.panel_open_locks = {}
         self.background = []
         self.last_backup = 0
 
     async def setup_hook(self):
-        self.add_view(BoardView(self))
+        self.add_view(BoardView(self))  # Compatibility with existing pre-V2 boards.
+        from .public_ui import PublicAction
+        self.add_dynamic_items(PublicAction)
         await self.add_cog(MapleCommands(self))
         target = os.getenv('DISCORD_TEST_GUILD_ID')
         if target:
@@ -317,10 +319,8 @@ class MapleBot(commands.Bot):
     async def on_member_remove(self, member):
         await asyncio.to_thread(self.service.observe_member, member.guild.id, member.id, member.display_name, 'left')
 
-    async def mutate(self, i, action, payload, token=None):
+    async def perform_mutation(self, i, action, payload, token=None):
         a = actor(i)
-        if not i.response.is_done():
-            await i.response.defer(ephemeral=True, thinking=True)
         # Permission first: unauthorized calls cannot trigger membership probes.
         def check():
             with self.service.db.transaction() as c:
@@ -353,7 +353,13 @@ class MapleBot(commands.Bot):
                 perm = channel.permissions_for(i.guild.me)
                 if not (perm.view_channel and perm.send_messages and perm.embed_links and perm.read_message_history):
                     raise UserError('게시 채널의 보기·전송·Embed·메시지 기록 읽기 권한이 필요합니다.')
-        result = await asyncio.to_thread(self.service.execute, a, action, payload, token)
+        return await asyncio.to_thread(self.service.execute, a, action, payload, token)
+
+    async def mutate(self, i, action, payload, token=None):
+        a = actor(i)
+        if not i.response.is_done():
+            await i.response.defer(ephemeral=True, thinking=True)
+        result = await self.perform_mutation(i, action, payload, token)
         if result['status'] == 'confirm':
             await i.followup.send(result['message'][:1900], view=Confirm(self, a.user_id, action, payload, result['token']), ephemeral=True)
         else:
@@ -389,18 +395,35 @@ class MapleBot(commands.Bot):
                 return [p for cid in ids for p in character_pages(c, a.guild_id, cid)] or pages('내 보스', ['등록된 캐릭터가 없습니다.'])
         await send_pages(i, await asyncio.to_thread(query))
 
-    async def open_panel(self, i, boss_id=None):
+    async def open_panel(self, i, boss_id=None, group_id=None, delete_group=False):
         a = actor(i)
-        await asyncio.to_thread(self.service.settings, a)
-        from .panel import MainPanel, BossPanel
-        if boss_id is not None:
-            boss = await asyncio.to_thread(self.entity,a,'bosses',boss_id)
-            if boss['status'] == 'deleted':
-                raise UserError('삭제된 보스입니다. /보스 복구를 사용해 주세요.')
-            await i.response.send_message(f'{safe(boss["name"])} ({safe(boss["difficulty"])})',view=BossPanel(self,a.user_id,boss_id),ephemeral=True)
-        else:
-            await i.response.send_message('파티 관리 · 캐릭터 관리 · 조회', view=MainPanel(self, a.user_id), ephemeral=True)
-
+        if not i.response.is_done():
+            await i.response.defer(ephemeral=True, thinking=True)
+        async with self.panel_open_locks.setdefault((a.guild_id,a.user_id),asyncio.Lock()):
+            await asyncio.to_thread(self.service.settings, a)
+            from .panel import PanelSession, route
+            initial=route('boss',boss_id=boss_id) if boss_id is not None else route()
+            if group_id is not None:
+                group=await asyncio.to_thread(self.entity,a,'boss_groups',group_id)
+                if group['boss_id']!=boss_id or group['status']!='active':
+                    raise UserError('현재 보스의 활성 파티가 아닙니다.')
+                initial=route('party',boss_id=boss_id,group_id=group_id)
+            sessions=getattr(self,'panel_sessions',{})
+            self.panel_sessions=sessions
+            previous=sessions.get((a.guild_id,a.user_id))
+            if previous:
+                async with previous.lock:
+                    previous.active=False
+                    if previous.view:previous.view.stop()
+                    if previous.message:
+                        try:await previous.message.delete()
+                        except discord.HTTPException:pass
+            session=PanelSession(self,a.user_id,a.guild_id,initial)
+            sessions[(a.guild_id,a.user_id)]=session
+            if delete_group:
+                await session.mutate(i,'group.delete',{'id':group_id},route('boss',boss_id=boss_id))
+            else:
+                await session.start(i)
 
 class MapleCommands(commands.Cog):
     settings = app_commands.Group(name='설정', description='서버 설정', guild_only=True)
