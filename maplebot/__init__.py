@@ -1,0 +1,1 @@
+"""Maple boss party bot."""

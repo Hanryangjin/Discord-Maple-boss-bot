@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maple-party-bot"
+version = "0.1.0"
+description = "Discord MapleStory boss party management"
+requires-python = ">=3.11"
+dependencies = ["discord.py==2.6.4"]
+
+[project.scripts]
+maplebot = "maplebot.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["maplebot*"]
+
+[tool.setuptools.package-data]
+maplebot = ["*.sql", "*.json"]
