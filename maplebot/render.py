@@ -36,11 +36,25 @@ def boss_pages(c, guild, boss_id, *, public=True):
     boss = c.execute('SELECT * FROM bosses WHERE guild_id=? AND id=?', (guild, boss_id)).fetchone()
     if not boss:
         raise UserError('보스를 찾을 수 없습니다.')
-    title = f'{boss["display_name"] or boss["name"]} ({boss["difficulty"]}) · 파티 배분표'
+    title = f'{boss["display_name"] or boss["name"]} ({boss["difficulty"]})'
     if public and boss['status'] != 'active':
         return pages(title, ['운영 중단' if boss['status'] == 'inactive' else '삭제된 보스'])
     if boss['status'] == 'deleted':
         return pages(title, ['삭제된 보스입니다. 서버 관리자는 /보스 복구를 사용할 수 있습니다.'])
+    if public:
+        from .cards import boss_data, party_pages, member_text
+        data = boss_data(c, guild, boss_id)
+        batches = party_pages(data['groups'])
+        rendered = []
+        for index, batch in enumerate(batches):
+            lines = []
+            for group in batch:
+                lines.append(f'{group["name"]} ({len(group["members"])}/{boss["max_members"]})')
+                lines.extend(member_text(member) for member in group['members'])
+            rendered.append({'title': title, 'description': '\n'.join(lines) or '파티 0개',
+                             'cards': batch, 'max_members': boss['max_members'],
+                             'page': index, 'page_count': len(batches), 'group_count': len(data['groups'])})
+        return rendered
     groups = c.execute("SELECT * FROM boss_groups WHERE guild_id=? AND boss_id=? AND status='active' ORDER BY sort_order,id", (guild, boss_id)).fetchall()
     lines = []
     for group in groups:

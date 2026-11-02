@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 from maplebot.db import Database
 from maplebot.discord_app import MapleBot,MapleCommands,BoardView
-from maplebot.panel import MainPanel,PartyPanel,CharacterPanel
+from maplebot.panel import PanelSession
 
 
 class CommandTests(unittest.IsolatedAsyncioTestCase):
@@ -23,7 +23,9 @@ class CommandTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('헥환초기화',edit)
             self.assertEqual(edit['헥환']['type'],3)  # STRING, not binary floating point
             self.assertTrue(edit['직업']['autocomplete'])
-            for view in (MainPanel(bot,1),PartyPanel(bot,1,1),CharacterPanel(bot,1,1),BoardView(bot)):
+            with bot.service.db.transaction() as c:
+                bot.service.db.initialize(c,1)
+            for view in (PanelSession(bot,1,1).build(),BoardView(bot)):
                 self.assertLessEqual(len(view.children),25)
                 self.assertTrue(view.to_components())
             self.assertTrue(BoardView(bot).is_persistent())
