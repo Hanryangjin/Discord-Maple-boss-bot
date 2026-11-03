@@ -226,11 +226,12 @@ class BoardView(discord.ui.View):
 
 
 class MapleBot(commands.Bot):
-    def __init__(self, db):
+    def __init__(self, db, *, test_guild_id=None):
         intents = discord.Intents.default()
         intents.members = True
         super().__init__(command_prefix=commands.when_mentioned, intents=intents,
                          allowed_mentions=discord.AllowedMentions.none(), proxy=os.getenv('DISCORD_PROXY') or None)
+        self.test_guild_id = test_guild_id
         self.service = Service(db)
         from .thumbnails import ThumbnailComposer
         self.thumbnails = ThumbnailComposer(self)
@@ -247,7 +248,7 @@ class MapleBot(commands.Bot):
         from .public_ui import PublicAction
         self.add_dynamic_items(PublicAction)
         await self.add_cog(MapleCommands(self))
-        target = os.getenv('DISCORD_TEST_GUILD_ID')
+        target = self.test_guild_id
         if target:
             guild = discord.Object(id=int(target))
             self.tree.copy_global_to(guild=guild)

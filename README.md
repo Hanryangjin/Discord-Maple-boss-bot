@@ -12,14 +12,15 @@ python3 -m venv .venv
 .venv/bin/python -m unittest discover -v
 ```
 
-`DISCORD_TOKEN`을 실행 환경에 안전하게 주입한 뒤 실행합니다. `.env.example`은 변수 안내용이며 `.env` 파일을 자동으로 읽지는 않습니다. 토큰을 저장소나 명령어 인수에 넣지 마세요.
+Windows에서는 [토큰·테스트 서버 ID 영구 설정 안내](docs/local-settings.md)에 따라 최초 한 번 등록하면 됩니다. 다른 환경에서는 `DISCORD_TOKEN`을 실행 환경에 안전하게 주입한 뒤 실행합니다. `.env.example`은 변수 안내용이며 `.env` 파일을 자동으로 읽지는 않습니다. 토큰을 저장소나 명령어 인수에 넣지 마세요.
 
 ```bash
 .venv/bin/python -m maplebot
 ```
 
-- `DISCORD_TOKEN`: 필수 봇 토큰
-- `DISCORD_TEST_GUILD_ID`: 선택. 지정하면 테스트 서버에만 명령어 동기화
+- `DISCORD_TOKEN`: 봇 토큰. Windows에서는 미설정 시 자격 증명 관리자에서 조회
+- `DISCORD_TEST_GUILD_ID`: 선택. 지정하면 테스트 서버에만 명령어 동기화. 환경 변수가 없으면 로컬 설정 사용
+- `MAPLEBOT_CONFIG`: 선택. 로컬 설정 경로, 기본 `config.local.json` (실행 디렉터리 기준)
 - `MAPLEBOT_JOB_ICONS`: 기본 `assets/jobs`. 선택적인 [직업 아이콘 교체 방법](assets/jobs/README.md). 기본 48개 SD 얼굴 이미지는 내장되어 별도 다운로드가 필요 없습니다.
 - `MAPLEBOT_DB`: 기본 `var/maplebot.sqlite3`
 - `MAPLEBOT_BACKUPS`: 기본 `var/backups`. 시작 전·실행 중 하루마다 SQLite backup API로 백업

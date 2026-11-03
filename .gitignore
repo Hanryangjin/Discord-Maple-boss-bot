@@ -10,3 +10,5 @@ assets/characters/*
 !assets/characters/README.md
 assets/jobs/*
 !assets/jobs/README.md
+config.local.json
+.maple-config-*.tmp
