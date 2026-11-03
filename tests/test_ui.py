@@ -135,7 +135,7 @@ class UIIntegrationTests(unittest.IsolatedAsyncioTestCase):
         await self.click(session,'뒤로')
         self.assertEqual(session.current['kind'],'home')
 
-    async def test_six_avatars_and_page_navigation_stay_in_limits(self):
+    async def test_six_members_image_and_page_navigation_stay_in_limits(self):
         for n in range(6):
             cid=self.char(n,10+n)
             self.do('group.member',{'id':self.gid,'character_id':cid})
@@ -144,8 +144,8 @@ class UIIntegrationTests(unittest.IsolatedAsyncioTestCase):
         session.notice='오류 또는 완료 안내'
         await session.start(self.i())
         self.assertLessEqual(session.view.total_children_count,40)
-        thumbs=[x for x in session.view.walk_children() if isinstance(x,discord.ui.Thumbnail)]
-        self.assertEqual(len(thumbs),6)
+        pictures=[x for x in session.view.walk_children() if isinstance(x,discord.ui.MediaGallery)]
+        self.assertEqual(len(pictures),1)
         self.assertIn('첫 파티',str(session.view.to_components()))
         await self.click(session,'다음 파티')
         self.assertIn('둘째 파티',str(session.view.to_components()))

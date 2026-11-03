@@ -224,12 +224,13 @@ class Service:
                 raise UserError('게시 준비·이전 작업이 진행 중입니다. 완료 후 순서를 변경해 주세요.')
             if settings['active_generation'] is not None:
                 channel=c.execute('SELECT channel_id FROM board_generations WHERE guild_id=? AND generation=?',(guild,settings['active_generation'])).fetchone()[0]
-                self.begin_publication(c,guild,channel,'reorder')
+                if not c.execute('SELECT 1 FROM board_forums WHERE channel_id=?',(channel,)).fetchone():
+                    self.begin_publication(c,guild,channel,'reorder')
         self.normalize_boss_order(c,guild,desired)
         names={r['id']:f'{r["name"]} ({r["difficulty"]})' for r in rows}
         listing='\n'.join(f'{index}. {names[bid]}' for index,bid in enumerate(desired,1))
         return ('보스 표시 순서를 변경합니다.\n'+listing[:1400]+
-                '\n게시 중이면 새 순서로 다시 게시한 뒤 이전 게시물을 정리합니다. 기존 메시지 링크는 변경됩니다.')
+                '\n텍스트 채널은 새 순서로 재게시되어 기존 메시지 링크가 바뀝니다. 포럼 목록은 Discord 정렬을 따르며 게시글을 유지합니다.')
 
     def apply(self, c, a, action, p):
         g = a.guild_id

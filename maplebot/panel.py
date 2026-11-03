@@ -75,6 +75,7 @@ class PanelSession:
         self.active = True
         self.notice = ''
         self.thumbnail_urls = {}
+        self.party_image_urls = {}
 
     def unregister(self):
         sessions = getattr(self.bot, 'panel_sessions', {})
@@ -153,14 +154,12 @@ class PanelSession:
         await i.delete_original_response()
 
     async def render(self, i):
-        from .thumbnails import prepare_thumbnails
         self.revision += 1
         snapshot = await asyncio.to_thread(self.read_snapshot)
         prepared=None
         try:
-            members=self.thumbnail_members(snapshot)
-            prepared=await prepare_thumbnails(self.bot,self.guild_id,members)
-            self.thumbnail_urls=prepared.urls
+            prepared=await self.prepare_images(snapshot)
+            # Image maps are assigned by prepare_images for the current route.
             try:
                 view = self.build_view(snapshot)
             except UserError as error:
@@ -168,8 +167,8 @@ class PanelSession:
                 self.current = route('boss', boss_id=self.current['boss_id']) if self.current.get('boss_id') and self.current['kind'] != 'boss' else route()
                 # A fallback route must not retain unrelated attachments.
                 prepared.close()
-                prepared=await prepare_thumbnails(self.bot,self.guild_id,self.thumbnail_members(snapshot))
-                self.thumbnail_urls=prepared.urls
+                prepared=await self.prepare_images(snapshot)
+                # Image maps are assigned by prepare_images for the current route.
                 view = self.build_view(snapshot)
             validate_layout(view)
             if self.view:
@@ -182,6 +181,20 @@ class PanelSession:
             snapshot.close()
             if prepared:prepared.close()
 
+    async def prepare_images(self,c):
+        from .thumbnails import prepare_thumbnails
+        from .party_image import prepare_parties
+        if self.current['kind'] in ('boss','party'):
+            groups,maximum=self.thumbnail_groups(c)
+            result=await prepare_parties(self.bot,self.guild_id,groups,maximum)
+            self.party_image_urls=result.urls
+            self.thumbnail_urls={}
+        else:
+            result=await prepare_thumbnails(self.bot,self.guild_id,self.thumbnail_members(c))
+            self.thumbnail_urls=result.urls
+            self.party_image_urls={}
+        return result
+
     def thumbnail_members(self,c):
         r=self.current
         if r['kind']=='character':
@@ -190,12 +203,16 @@ class PanelSession:
                 job=self.load(c,'jobs',ch['job_id'])
                 return [{**dict(ch),'job_icon_key':job['icon_key']}]
             return []
-        if r['kind'] not in ('boss','party'):
-            return []
+        groups,_=self.thumbnail_groups(c)
+        return [m for group in groups for m in group['members']]
+
+    def thumbnail_groups(self,c):
+        r=self.current
+        if r['kind'] not in ('boss','party'):return [],6
         bid=r.get('boss_id')
         if bid is None:
             boss=c.execute("SELECT id FROM bosses WHERE guild_id=? AND status<>'deleted' ORDER BY sort_order,id LIMIT 1",(self.guild_id,)).fetchone()
-            if not boss:return []
+            if not boss:return [],6
             bid=boss[0]
         data=boss_data(c,self.guild_id,bid)
         if r['kind']=='party':
@@ -203,7 +220,7 @@ class PanelSession:
         else:
             batches=party_pages(data['groups'])
             groups=batches[min(r['page'],len(batches)-1)]
-        return [m for group in groups for m in group['members']]
+        return groups,data['max_members']
 
     async def form(self, i, title, fields, callback):
         await i.response.send_modal(TextForm(self, title, fields, callback))
@@ -400,7 +417,7 @@ class PanelSession:
             destination=route('party',boss_id=bid,group_id=gid)
             controls=[self.button('편집',lambda i,d=destination:self.go(i,d),style=discord.ButtonStyle.primary),
                       self.button('삭제',lambda i,g=gid:self.mutate(i,'group.delete',{'id':g},route('boss',boss_id=bid)),style=discord.ButtonStyle.danger,disabled=data['status']!='active')]
-            view.add_item(party_card(self.bot,self.guild_id,group,data['max_members'],controls,self.thumbnail_urls))
+            view.add_item(party_card(self.bot,self.guild_id,group,data['max_members'],controls,self.thumbnail_urls,party_images=self.party_image_urls))
         if not data['groups']:
             view.add_item(discord.ui.TextDisplay('아직 파티가 없습니다. **＋ 파티 생성**으로 시작하세요.'))
         # Merge page navigation into bottom row to keep six-avatar parties under 40 components.
@@ -457,7 +474,7 @@ class PanelSession:
         card=next((g for g in data['groups'] if g['id']==group['id']),None)
         if not card:raise UserError('삭제된 파티입니다.')
         view.add_item(discord.ui.TextDisplay('## '+safe(data['name'])+' · 파티 편집'))
-        view.add_item(party_card(self.bot,self.guild_id,card,data['max_members'],thumbnails=self.thumbnail_urls))
+        view.add_item(party_card(self.bot,self.guild_id,card,data['max_members'],thumbnails=self.thumbnail_urls,party_images=self.party_image_urls))
         active=data['status']=='active'
         view.add_item(discord.ui.ActionRow(
             self.button('＋ 캐릭터 추가',lambda i:self.pick_member(i,'add'),disabled=not active),

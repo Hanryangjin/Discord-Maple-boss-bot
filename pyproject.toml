@@ -17,4 +17,4 @@ include = ["maplebot*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-maplebot = ["*.sql", "*.json", "resources/job_icons/*.json", "resources/job_icons/*.webp", "resources/job_icons/*.png", "resources/job_icons/*.md"]
+maplebot = ["*.sql", "*.json", "resources/job_icons/*.json", "resources/job_icons/*.webp", "resources/job_icons/*.png", "resources/job_icons/*.md", "resources/fonts/*.otf", "resources/fonts/*.txt"]

@@ -1,7 +1,7 @@
 """Card board layout and restart-safe buttons with non-visible recovery metadata."""
 import re
 import discord
-from .cards import party_card, validate_layout
+from .cards import party_card, image_party_card, validate_layout
 from .render import safe
 from .validation import UserError
 
@@ -77,7 +77,7 @@ class PublicAction(discord.ui.DynamicItem[discord.ui.Button], template=PATTERN):
             await report(i,error)
 
 
-def board_layout(bot, body, marker, thumbnails=None):
+def board_layout(bot, body, marker, thumbnails=None, party_images=None):
     view=discord.ui.LayoutView(timeout=None)
     identity=parse_marker(marker)
     continuation=body.get('page',0)>0
@@ -90,7 +90,10 @@ def board_layout(bot, body, marker, thumbnails=None):
     if 'cards' in body:
         for group in body['cards']:
             controls=[PublicAction(*identity,'edit',group['id']),PublicAction(*identity,'delete',group['id'])] if identity else None
-            view.add_item(party_card(bot,identity[0],group,body['max_members'],controls,thumbnails))
+            if party_images and group['id'] in party_images:
+                view.add_item(image_party_card(group,body['max_members'],party_images[group['id']],controls))
+            else:
+                view.add_item(party_card(bot,identity[0],group,body['max_members'],controls,thumbnails))
         if not body['cards']:
             view.add_item(discord.ui.Container(discord.ui.TextDisplay('## 파티 0개\n관리 패널에서 첫 파티를 생성하세요.'),accent_colour=0x65AD86))
     else:

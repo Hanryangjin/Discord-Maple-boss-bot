@@ -137,6 +137,9 @@ class BoardWorker:
 
     @staticmethod
     def physically_ordered(c,guild,generation):
+        # Forum lists are sorted by Discord activity, not message snowflakes.
+        forum=c.execute('SELECT 1 FROM board_forums f JOIN board_generations g ON g.channel_id=f.channel_id WHERE g.guild_id=? AND g.generation=?',(guild,generation)).fetchone()
+        if forum:return True
         ids=[row[0] for row in c.execute("""SELECT m.message_id FROM board_messages m
             JOIN bosses b ON b.guild_id=m.guild_id AND b.id=m.boss_id
             WHERE m.guild_id=? AND m.generation=? AND b.status='active'

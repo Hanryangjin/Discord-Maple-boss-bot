@@ -95,3 +95,14 @@ CREATE TABLE IF NOT EXISTS board_jobs(
 );
 CREATE INDEX IF NOT EXISTS members_character ON group_members(guild_id,character_id);
 CREATE INDEX IF NOT EXISTS characters_owner ON characters(guild_id,owner_id);
+
+CREATE TABLE IF NOT EXISTS board_forums(channel_id INTEGER PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS forum_topics(
+ channel_id INTEGER NOT NULL, guild_id INTEGER NOT NULL, generation INTEGER NOT NULL,
+ boss_id INTEGER NOT NULL, thread_id INTEGER NOT NULL UNIQUE,
+ PRIMARY KEY(channel_id,guild_id,generation,boss_id)
+);
+CREATE TABLE IF NOT EXISTS forum_routes(
+ channel_id INTEGER NOT NULL,message_id INTEGER NOT NULL,thread_id INTEGER NOT NULL,
+ PRIMARY KEY(channel_id,message_id)
+);
