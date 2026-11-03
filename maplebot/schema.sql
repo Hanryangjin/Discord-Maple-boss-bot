@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS discord_users(
 CREATE TABLE IF NOT EXISTS jobs(
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL REFERENCES guild_settings,
  name TEXT NOT NULL, name_key TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
- version INTEGER NOT NULL DEFAULT 1, links_version INTEGER NOT NULL DEFAULT 0,
+ version INTEGER NOT NULL DEFAULT 1, links_version INTEGER NOT NULL DEFAULT 0, icon_key TEXT,
  UNIQUE(guild_id,name_key), UNIQUE(guild_id,id)
 );
 CREATE TABLE IF NOT EXISTS cycles(

@@ -1,0 +1,636 @@
+{
+  "source_repository": "https://github.com/min06150315/Maple-Job-Random",
+  "source_commit": "645ec421fed6432e7f54d084e6d49d0b90de4600",
+  "rights_note": "MapleStory artwork belongs to its respective rights holders. Source repository does not establish a separate image reuse license.",
+  "icons": {
+    "job-001": {
+      "job": "히어로",
+      "file": "job-001.webp",
+      "source_file": "images/a0.webp",
+      "sha256": "beb985bb6b6adafb9255cc740930f056e2a3a91ba30b8cac6f8c2aee5d180c37",
+      "crop": [
+        118,
+        7,
+        414,
+        302
+      ]
+    },
+    "job-002": {
+      "job": "팔라딘",
+      "file": "job-002.webp",
+      "source_file": "images/a1.webp",
+      "sha256": "8fa3a9f680dd24ad3bb44aebc26e72ed1cc46a500f2a2943d3dfbed9dbbeacd9",
+      "crop": [
+        138,
+        7,
+        434,
+        302
+      ]
+    },
+    "job-003": {
+      "job": "다크나이트",
+      "file": "job-003.webp",
+      "source_file": "images/a2.webp",
+      "sha256": "4391deb3d32757d2fd17e17ebd9e9e49200741a961ccff3dee992bd4c4b041df",
+      "crop": [
+        179,
+        8,
+        499,
+        327
+      ]
+    },
+    "job-004": {
+      "job": "아크메이지(불,독)",
+      "file": "job-004.webp",
+      "source_file": "images/a3.webp",
+      "sha256": "01f7ef2784698b34dbd31bad7d77833598900e6e86d25073c98968cfb5d3e4cd",
+      "crop": [
+        204,
+        39,
+        513,
+        347
+      ]
+    },
+    "job-005": {
+      "job": "아크메이지(썬,콜)",
+      "file": "job-005.webp",
+      "source_file": "images/a4.webp",
+      "sha256": "7f3eacb00f5aa94a6f78f9429c40bac2e10caf3465ed7c11beb1030b3483d3c0",
+      "crop": [
+        175,
+        31,
+        454,
+        311
+      ]
+    },
+    "job-006": {
+      "job": "비숍",
+      "file": "job-006.webp",
+      "source_file": "images/a5.webp",
+      "sha256": "bd69df6c9ae8f35e6b999a2d370cbf164e763f9a243afc531be6d3b204191bf1",
+      "crop": [
+        138,
+        0,
+        458,
+        321
+      ]
+    },
+    "job-007": {
+      "job": "보우마스터",
+      "file": "job-007.webp",
+      "source_file": "images/a6.webp",
+      "sha256": "8dcb093367332188df94ef4e80356cd2fe1e4da008a63c13f81a086adefeb73e",
+      "crop": [
+        140,
+        28,
+        438,
+        326
+      ]
+    },
+    "job-008": {
+      "job": "신궁",
+      "file": "job-008.webp",
+      "source_file": "images/a7.webp",
+      "sha256": "a97f0580bbb746ba8718686cd463863a1f6bdd4a32309145317c67090c80bdf8",
+      "crop": [
+        167,
+        70,
+        480,
+        382
+      ]
+    },
+    "job-009": {
+      "job": "패스파인더",
+      "file": "job-009.webp",
+      "source_file": "images/a8.webp",
+      "sha256": "f409bd06785e54894195a8ff5669d67f3d7bf07a15bfa54c8d8c01729fce2c80",
+      "crop": [
+        198,
+        69,
+        502,
+        373
+      ]
+    },
+    "job-010": {
+      "job": "나이트로드",
+      "file": "job-010.webp",
+      "source_file": "images/a9.webp",
+      "sha256": "005b93632b59b09d92f375e52fb46cb61ad24f773097eb03d81c1d17b7a3dbfd",
+      "crop": [
+        62,
+        124,
+        356,
+        418
+      ]
+    },
+    "job-011": {
+      "job": "섀도어",
+      "file": "job-011.webp",
+      "source_file": "images/a10.webp",
+      "sha256": "aded66980536f8f06138c3eeaf756ade62a03a1b368249fef887eb400cc8cb4c",
+      "crop": [
+        116,
+        52,
+        438,
+        374
+      ]
+    },
+    "job-012": {
+      "job": "듀얼블레이더",
+      "file": "job-012.webp",
+      "source_file": "images/a11.webp",
+      "sha256": "258a910e531e331aa6475693d55a1ceda2df37099a8d206d6eecf0675e54ffbd",
+      "crop": [
+        122,
+        66,
+        418,
+        362
+      ]
+    },
+    "job-013": {
+      "job": "바이퍼",
+      "file": "job-013.webp",
+      "source_file": "images/a12.webp",
+      "sha256": "f90771fd208d0eaefc220335b80332208df2a10e8924df71b98728ed44950b7f",
+      "crop": [
+        107,
+        228,
+        446,
+        567
+      ]
+    },
+    "job-014": {
+      "job": "캡틴",
+      "file": "job-014.webp",
+      "source_file": "images/a13.webp",
+      "sha256": "9e1d43226bbc2fb9bb3e111df93b6ed0e2fb6866a662621099e9e6a43860c83c",
+      "crop": [
+        160,
+        132,
+        473,
+        445
+      ]
+    },
+    "job-015": {
+      "job": "캐논슈터",
+      "file": "job-015.webp",
+      "source_file": "images/a14.webp",
+      "sha256": "0b1d9d8ee2e54eafcba8757c9edfcd7e194a3d179afc8dc34bca8b760e6cd945",
+      "crop": [
+        135,
+        106,
+        464,
+        435
+      ]
+    },
+    "job-016": {
+      "job": "소울마스터",
+      "file": "job-016.webp",
+      "source_file": "images/b0.webp",
+      "sha256": "146a750652c3465572e6c5e96538fd6df231d290fc69b1db6ad498c6fb833905",
+      "crop": [
+        146,
+        93,
+        450,
+        397
+      ]
+    },
+    "job-017": {
+      "job": "플레임위자드",
+      "file": "job-017.webp",
+      "source_file": "images/b2.webp",
+      "sha256": "c71883bc03cdb5c4491ba16e1508e20696aed0a5e58b266b7492387c125319c6",
+      "crop": [
+        110,
+        80,
+        408,
+        378
+      ]
+    },
+    "job-018": {
+      "job": "윈드브레이커",
+      "file": "job-018.webp",
+      "source_file": "images/b3.webp",
+      "sha256": "a89d699a42c7cd0be7eaa7beeeda9e5a8d1482121d050ba384c9ad0dc074ede5",
+      "crop": [
+        203,
+        81,
+        484,
+        362
+      ]
+    },
+    "job-019": {
+      "job": "나이트워커",
+      "file": "job-019.webp",
+      "source_file": "images/b4.webp",
+      "sha256": "6e006648fa254d1b1a1b23b098dce5a53968a1e9942781b2915aaf591a3c29b5",
+      "crop": [
+        163,
+        147,
+        538,
+        506
+      ]
+    },
+    "job-020": {
+      "job": "스트라이커",
+      "file": "job-020.webp",
+      "source_file": "images/b5.webp",
+      "sha256": "8bd17c3499a8fe34ec05715e7e7efb77faeca363c1bc8f09671869176b7c22e6",
+      "crop": [
+        115,
+        153,
+        413,
+        451
+      ]
+    },
+    "job-021": {
+      "job": "미하일",
+      "file": "job-021.webp",
+      "source_file": "images/b1.webp",
+      "sha256": "0a64945bf595e190ebc7005b317b04eb10323449fa286db9cd807cd9668c3f41",
+      "crop": [
+        106,
+        95,
+        357,
+        346
+      ]
+    },
+    "job-022": {
+      "job": "아란",
+      "file": "job-022.webp",
+      "source_file": "images/d0.webp",
+      "sha256": "52755546f9167815aee5c89d36710e388cd53cd2c68c0c6ecff84d5525974cb3",
+      "crop": [
+        112,
+        68,
+        365,
+        321
+      ]
+    },
+    "job-023": {
+      "job": "에반",
+      "file": "job-023.webp",
+      "source_file": "images/d1.webp",
+      "sha256": "b7c943771bf6be9179ca482bf59ef821fde83c2fa5e8c8ad3c782d5558bd20ff",
+      "crop": [
+        131,
+        91,
+        458,
+        418
+      ]
+    },
+    "job-024": {
+      "job": "루미너스",
+      "file": "job-024.webp",
+      "source_file": "images/d2.webp",
+      "sha256": "47fc36da35b3f58f97321a06d57de87cdd93d4fe7209f9c2356d0ab6a6fb580c",
+      "crop": [
+        151,
+        70,
+        423,
+        342
+      ]
+    },
+    "job-025": {
+      "job": "메르세데스",
+      "file": "job-025.webp",
+      "source_file": "images/d3.webp",
+      "sha256": "00b0a7b124943f6a5bbe16928fc486d8bb26ee0a316dcee06f91873a8ecfdf73",
+      "crop": [
+        201,
+        48,
+        679,
+        526
+      ]
+    },
+    "job-026": {
+      "job": "팬텀",
+      "file": "job-026.webp",
+      "source_file": "images/d4.webp",
+      "sha256": "77c8a44b633c28e0398f368cbc4dda97328c6f68a1974ced024f35c4a460b337",
+      "crop": [
+        81,
+        34,
+        344,
+        297
+      ]
+    },
+    "job-027": {
+      "job": "은월",
+      "file": "job-027.webp",
+      "source_file": "images/d5.webp",
+      "sha256": "c0f46772bebb1e6d5b48fc1749cd9d0394950538bc369eb092bd3ecee185eeb9",
+      "crop": [
+        173,
+        82,
+        599,
+        509
+      ]
+    },
+    "job-028": {
+      "job": "블래스터",
+      "file": "job-028.webp",
+      "source_file": "images/c2.webp",
+      "sha256": "59add5620319adbf4dae008b043ad905b30f04646b4fa178b64a719171ebe520",
+      "crop": [
+        99,
+        92,
+        445,
+        437
+      ]
+    },
+    "job-029": {
+      "job": "배틀메이지",
+      "file": "job-029.webp",
+      "source_file": "images/c3.webp",
+      "sha256": "629a79abbfc6dbad8de1769c66e86fc802c7bd853ed38a2fad8f1112a687fc3f",
+      "crop": [
+        122,
+        159,
+        507,
+        545
+      ]
+    },
+    "job-030": {
+      "job": "와일드헌터",
+      "file": "job-030.webp",
+      "source_file": "images/c4.webp",
+      "sha256": "f9515c91d73230619fae4be99602601dd7beb535d4630baf67de6ac5fc1f9129",
+      "crop": [
+        145,
+        28,
+        483,
+        367
+      ]
+    },
+    "job-031": {
+      "job": "메카닉",
+      "file": "job-031.webp",
+      "source_file": "images/c6.webp",
+      "sha256": "ee181662c9fffaf6581d33dffd1b92289aad9de9bf608425eda4615acbb543f3",
+      "crop": [
+        208,
+        74,
+        589,
+        455
+      ]
+    },
+    "job-032": {
+      "job": "제논",
+      "file": "job-032.webp",
+      "source_file": "images/c5.webp",
+      "sha256": "21f3ab078c464a0160f14e4a78ab18fc2326e46af2a4edb82b2b8cbe0e79934b",
+      "crop": [
+        139,
+        60,
+        396,
+        317
+      ]
+    },
+    "job-033": {
+      "job": "데몬슬레이어",
+      "file": "job-033.webp",
+      "source_file": "images/c0.webp",
+      "sha256": "babac5bc0a780d76b528bce74b03832a6f6ae957d6411f5e0b07610f2346bbef",
+      "crop": [
+        69,
+        51,
+        326,
+        309
+      ]
+    },
+    "job-034": {
+      "job": "데몬어벤져",
+      "file": "job-034.webp",
+      "source_file": "images/c1.webp",
+      "sha256": "0935b04d7e825cbb56da467f814ef490e4c814c2082de91b3362400bce20320e",
+      "crop": [
+        72,
+        131,
+        340,
+        399
+      ]
+    },
+    "job-035": {
+      "job": "카이저",
+      "file": "job-035.webp",
+      "source_file": "images/e0.webp",
+      "sha256": "5a35a1ba032587f1e9886eee176b7425356b05359c01873321cc3c3ee7a155b4",
+      "crop": [
+        103,
+        57,
+        360,
+        314
+      ]
+    },
+    "job-036": {
+      "job": "카인",
+      "file": "job-036.webp",
+      "source_file": "images/e1.webp",
+      "sha256": "6f42afa46874a67a5eacfa98bd93cd5d137a87ef852d8e2ab31f68fbd7c10426",
+      "crop": [
+        130,
+        140,
+        563,
+        573
+      ]
+    },
+    "job-037": {
+      "job": "카데나",
+      "file": "job-037.webp",
+      "source_file": "images/e2.webp",
+      "sha256": "6f658c848993c7d8ef4ec5be6d2cb3dce5e8c61cb1f594db0f05f699e22d9900",
+      "crop": [
+        166,
+        69,
+        491,
+        394
+      ]
+    },
+    "job-038": {
+      "job": "엔젤릭버스터",
+      "file": "job-038.webp",
+      "source_file": "images/e3.webp",
+      "sha256": "299eb1755a1f120713513b4456938d911a81d5e107a98d65afd9cca45715335a",
+      "crop": [
+        219,
+        165,
+        613,
+        558
+      ]
+    },
+    "job-039": {
+      "job": "아델",
+      "file": "job-039.webp",
+      "source_file": "images/f0.webp",
+      "sha256": "2c431d5e0be2a3d0de1bdbb0e04f7c4e25e8bc9ec471ee5ed9fbccb0a5630b95",
+      "crop": [
+        99,
+        86,
+        421,
+        407
+      ]
+    },
+    "job-040": {
+      "job": "일리움",
+      "file": "job-040.webp",
+      "source_file": "images/f1.webp",
+      "sha256": "a385515a0f7d228a0750c194e0c8965dd984d44e9679992782469592b3c554ca",
+      "crop": [
+        144,
+        38,
+        413,
+        306
+      ]
+    },
+    "job-041": {
+      "job": "칼리",
+      "file": "job-041.webp",
+      "source_file": "images/f2.webp",
+      "sha256": "d0047a510bcc4e2b17a8089df8e24f60a44fc053a770f8a33bc80075b472f6e6",
+      "crop": [
+        147,
+        113,
+        429,
+        395
+      ]
+    },
+    "job-042": {
+      "job": "아크",
+      "file": "job-042.webp",
+      "source_file": "images/f3.webp",
+      "sha256": "752cabcc0e95762b2814a6ca89d7b0a81b757c9278484cfc110e5cded915aa3b",
+      "crop": [
+        156,
+        76,
+        469,
+        389
+      ]
+    },
+    "job-043": {
+      "job": "라라",
+      "file": "job-043.webp",
+      "source_file": "images/g0.webp",
+      "sha256": "50d80d1ee7a4d0e2ad1a0467826d7ab390366e3e13b93ad3b2c920ea72fc98ce",
+      "crop": [
+        139,
+        75,
+        431,
+        366
+      ]
+    },
+    "job-044": {
+      "job": "호영",
+      "file": "job-044.webp",
+      "source_file": "images/g1.webp",
+      "sha256": "65dd91fad3fa5670f6194c6b643139599cffca77fa3b2a0b3743e5876a06ffcc",
+      "crop": [
+        110,
+        51,
+        342,
+        283
+      ]
+    },
+    "job-045": {
+      "job": "렌",
+      "file": "job-045.webp",
+      "source_file": "images/g2.webp",
+      "sha256": "72d0d660a5fa2522384e5cd130731f2680f3ef11ab029643d811b1cddf7d75f5",
+      "crop": [
+        155,
+        164,
+        528,
+        537
+      ]
+    },
+    "job-046": {
+      "job": "제로",
+      "file": "job-046.webp",
+      "source_file": "images/h0.webp",
+      "sha256": "4ab22d890896eccdb1652c2a09a4e11a361a9cfc24d166c209367a574ed25e30",
+      "crop": [
+        37,
+        0,
+        768,
+        569
+      ]
+    },
+    "job-047": {
+      "job": "키네시스",
+      "file": "job-047.webp",
+      "source_file": "images/i0.webp",
+      "sha256": "edd5c88af6eb9adb10eae41a973df1456508cac7c550f3fc28cd63e730b6bbf1",
+      "crop": [
+        80,
+        85,
+        522,
+        527
+      ]
+    },
+    "job-048": {
+      "job": "레테",
+      "file": "job-048.png",
+      "source_repository": "https://github.com/N-ightmar-e/maple-patch-notes",
+      "source_commit": "9003d5fc0bfd28885a418e5d6cb8e571e43def46",
+      "source_file": "public/assets/jobs/job-49.png",
+      "original_url": "https://lwi.nexon.com/maplestory/guide/char_info/char49.png",
+      "guide_url": "https://maplestory.nexon.com/Guide/N23Job/View/49",
+      "sha256": "c7b535e6f851b650fad417a4f063889f3a92df1be40a50938459d88dd8e5ea90",
+      "crop": [
+        30,
+        45,
+        150,
+        165
+      ]
+    }
+  },
+  "legacy_seed_order": [
+    "job-001",
+    "job-002",
+    "job-003",
+    "job-004",
+    "job-005",
+    "job-006",
+    "job-007",
+    "job-008",
+    "job-009",
+    "job-010",
+    "job-011",
+    "job-012",
+    "job-013",
+    "job-014",
+    "job-015",
+    "job-016",
+    "job-017",
+    "job-018",
+    "job-019",
+    "job-020",
+    "job-021",
+    "job-022",
+    "job-023",
+    "job-024",
+    "job-025",
+    "job-026",
+    "job-027",
+    "job-028",
+    "job-029",
+    "job-030",
+    "job-031",
+    "job-032",
+    "job-033",
+    "job-034",
+    "job-035",
+    "job-036",
+    "job-037",
+    "job-038",
+    "job-039",
+    "job-040",
+    "job-041",
+    "job-042",
+    "job-043",
+    "job-044",
+    "job-045",
+    "job-046",
+    "job-047"
+  ]
+}

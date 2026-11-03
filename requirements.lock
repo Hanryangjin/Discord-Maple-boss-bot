@@ -9,3 +9,4 @@ multidict==7.2.1
 propcache==0.5.4
 typing_extensions==4.16.0
 yarl==1.25.1
+pillow==13.0.0

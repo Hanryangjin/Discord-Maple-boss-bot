@@ -95,6 +95,7 @@ class BoardWorker:
             # Definitive permission/channel failure aborts preparation; transient failures resume.
             if gen and gen[0] == 'preparing' and isinstance(exc, (PermissionError, LookupError)):
                 c.execute("UPDATE board_generations SET status='retired' WHERE guild_id=? AND generation=?", (guild, generation))
+                c.execute('UPDATE board_sync_state SET retry_at=? WHERE guild_id=? AND generation=?',(time.time()+60,guild,generation))
                 c.execute('UPDATE guild_settings SET preparing_generation=NULL WHERE guild_id=? AND preparing_generation=?', (guild, generation))
                 c.execute("UPDATE board_jobs SET state='failed',last_error=? WHERE guild_id=? AND generation=?", (message, guild, generation))
 
@@ -134,6 +135,39 @@ class BoardWorker:
             await asyncio.to_thread(self.failure, guild, generation, boss, exc)
             log.warning('board sync failed guild=%s generation=%s boss=%s error=%s', guild, generation, boss, type(exc).__name__)
 
+    @staticmethod
+    def physically_ordered(c,guild,generation):
+        ids=[row[0] for row in c.execute("""SELECT m.message_id FROM board_messages m
+            JOIN bosses b ON b.guild_id=m.guild_id AND b.id=m.boss_id
+            WHERE m.guild_id=? AND m.generation=? AND b.status='active'
+            ORDER BY b.sort_order,b.id,m.page""",(guild,generation))]
+        return ids==sorted(ids)
+
+    def ensure_order(self,guild):
+        # Discord cannot move existing messages. If a deleted/page-grown board lands
+        # below another boss, rebuild a generation rather than claiming it was moved.
+        with self.db.transaction() as c:
+            settings=c.execute('SELECT * FROM guild_settings WHERE guild_id=?',(guild,)).fetchone()
+            for generation in (settings['preparing_generation'],settings['active_generation']):
+                if generation is None or self.physically_ordered(c,guild,generation):
+                    continue
+                gen=c.execute('SELECT * FROM board_generations WHERE guild_id=? AND generation=?',(guild,generation)).fetchone()
+                if gen['status']=='active' and settings['preparing_generation'] is not None:
+                    continue
+                cooldown=c.execute("""SELECT 1 FROM board_generations old JOIN board_sync_state state
+                    ON state.guild_id=old.guild_id AND state.generation=old.generation
+                    WHERE old.guild_id=? AND old.channel_id=? AND old.status='retired'
+                    AND old.last_error IS NOT NULL AND state.retry_at>? LIMIT 1""",(guild,gen['channel_id'],time.time())).fetchone()
+                if cooldown:
+                    continue
+                if gen['status']=='preparing':
+                    c.execute("UPDATE board_generations SET status='retired' WHERE guild_id=? AND generation=?",(guild,generation))
+                    c.execute("UPDATE board_jobs SET state='cancelled' WHERE guild_id=? AND generation=? AND state='pending'",(guild,generation))
+                    c.execute('UPDATE guild_settings SET preparing_generation=NULL WHERE guild_id=?',(guild,))
+                self.service.begin_publication(c,guild,gen['channel_id'],'order-repair')
+                self.service.touch(c,guild)
+                return
+
     def promote(self, guild):
         with self.db.transaction() as c:
             settings = c.execute('SELECT * FROM guild_settings WHERE guild_id=?', (guild,)).fetchone()
@@ -142,7 +176,7 @@ class BoardWorker:
                 return
             pending = c.execute('SELECT 1 FROM board_sync_state WHERE guild_id=? AND generation=? AND completed<requested', (guild, gen)).fetchone()
             missing = c.execute("SELECT 1 FROM bosses b WHERE guild_id=? AND status='active' AND NOT EXISTS(SELECT 1 FROM board_sync_state s WHERE s.guild_id=b.guild_id AND s.generation=? AND s.boss_id=b.id)", (guild, gen)).fetchone()
-            if pending or missing:
+            if pending or missing or not self.physically_ordered(c,guild,gen):
                 return
             target = c.execute('SELECT * FROM board_generations WHERE guild_id=? AND generation=?', (guild, gen)).fetchone()
             if target['status'] != 'preparing':
@@ -207,8 +241,9 @@ class BoardWorker:
         await self.recover_orphans(guild)
         for gen in await asyncio.to_thread(self.targets, guild):
             with self.db.transaction(False) as c:
-                ids = [r[0] for r in c.execute('SELECT boss_id FROM board_sync_state WHERE guild_id=? AND generation=? AND requested>completed ORDER BY boss_id', (guild, gen['generation']))]
+                ids = [r[0] for r in c.execute('SELECT s.boss_id FROM board_sync_state s JOIN bosses b ON b.guild_id=s.guild_id AND b.id=s.boss_id WHERE s.guild_id=? AND s.generation=? AND s.requested>s.completed ORDER BY b.sort_order,b.id', (guild, gen['generation']))]
             for boss in ids:
                 await self.reconcile(guild, gen['generation'], boss)
+        await asyncio.to_thread(self.ensure_order, guild)
         await asyncio.to_thread(self.promote, guild)
         await self.cleanup(guild)

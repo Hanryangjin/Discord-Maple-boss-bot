@@ -38,7 +38,7 @@ class PanelLayout(discord.ui.LayoutView):
             expired.add_item(discord.ui.TextDisplay('## 관리 화면이 만료되었습니다\n공개 배분표의 관리 패널 또는 `/관리 패널`로 다시 열어 주세요.'))
             if self.session.message:
                 try:
-                    await self.session.message.edit(content=None, embeds=[], view=expired, allowed_mentions=discord.AllowedMentions.none())
+                    await self.session.message.edit(content=None, embeds=[], view=expired, attachments=[], allowed_mentions=discord.AllowedMentions.none())
                 except discord.HTTPException:
                     pass
             # Retain the inactive root so reopening can remove the expired panel.
@@ -74,6 +74,7 @@ class PanelSession:
         self.message = None
         self.active = True
         self.notice = ''
+        self.thumbnail_urls = {}
 
     def unregister(self):
         sessions = getattr(self.bot, 'panel_sessions', {})
@@ -125,7 +126,7 @@ class PanelSession:
         if not self.active:
             closed = discord.ui.LayoutView(timeout=None)
             closed.add_item(discord.ui.TextDisplay('## 관리 화면 종료\n'+safe(self.notice)))
-            await i.edit_original_response(content=None, embeds=[], view=closed, allowed_mentions=discord.AllowedMentions.none())
+            await i.edit_original_response(content=None, embeds=[], view=closed, attachments=[], allowed_mentions=discord.AllowedMentions.none())
             return
         await self.render(i)
 
@@ -152,23 +153,57 @@ class PanelSession:
         await i.delete_original_response()
 
     async def render(self, i):
+        from .thumbnails import prepare_thumbnails
         self.revision += 1
         snapshot = await asyncio.to_thread(self.read_snapshot)
+        prepared=None
         try:
+            members=self.thumbnail_members(snapshot)
+            prepared=await prepare_thumbnails(self.bot,self.guild_id,members)
+            self.thumbnail_urls=prepared.urls
             try:
                 view = self.build_view(snapshot)
             except UserError as error:
                 self.notice = str(error)
                 self.current = route('boss', boss_id=self.current['boss_id']) if self.current.get('boss_id') and self.current['kind'] != 'boss' else route()
+                # A fallback route must not retain unrelated attachments.
+                prepared.close()
+                prepared=await prepare_thumbnails(self.bot,self.guild_id,self.thumbnail_members(snapshot))
+                self.thumbnail_urls=prepared.urls
                 view = self.build_view(snapshot)
+            validate_layout(view)
+            if self.view:
+                self.view.stop()
+            self.view = view
+            await i.edit_original_response(content=None, embeds=[], attachments=prepared.files,
+                view=view, allowed_mentions=discord.AllowedMentions.none())
+            self.message = await i.original_response()
         finally:
             snapshot.close()
-        validate_layout(view)
-        if self.view:
-            self.view.stop()
-        self.view = view
-        await i.edit_original_response(content=None, embeds=[], view=view, allowed_mentions=discord.AllowedMentions.none())
-        self.message = await i.original_response()
+            if prepared:prepared.close()
+
+    def thumbnail_members(self,c):
+        r=self.current
+        if r['kind']=='character':
+            ch=c.execute('SELECT * FROM characters WHERE guild_id=? AND id=?',(self.guild_id,r['char_id'])).fetchone()
+            if ch:
+                job=self.load(c,'jobs',ch['job_id'])
+                return [{**dict(ch),'job_icon_key':job['icon_key']}]
+            return []
+        if r['kind'] not in ('boss','party'):
+            return []
+        bid=r.get('boss_id')
+        if bid is None:
+            boss=c.execute("SELECT id FROM bosses WHERE guild_id=? AND status<>'deleted' ORDER BY sort_order,id LIMIT 1",(self.guild_id,)).fetchone()
+            if not boss:return []
+            bid=boss[0]
+        data=boss_data(c,self.guild_id,bid)
+        if r['kind']=='party':
+            groups=[g for g in data['groups'] if g['id']==r['group_id']]
+        else:
+            batches=party_pages(data['groups'])
+            groups=batches[min(r['page'],len(batches)-1)]
+        return [m for group in groups for m in group['members']]
 
     async def form(self, i, title, fields, callback):
         await i.response.send_modal(TextForm(self, title, fields, callback))
@@ -204,16 +239,19 @@ class PanelSession:
         return discord.ui.ActionRow(select)
 
     def navigation(self):
-        if self.current['kind']=='boss' and getattr(self,'page_navigation',None):
-            total,page=self.page_navigation
+        if self.current['kind']=='boss':
             r=self.current
-            return discord.ui.ActionRow(
-                self.button('뒤로',self.back,disabled=not self.history),
-                self.button('관리 홈',self.home),
-                self.button('이전 파티',lambda i:self.go(i,{**r,'page':page-1},push=False),disabled=page==0),
-                self.button('다음 파티',lambda i:self.go(i,{**r,'page':page+1},push=False),disabled=page>=total-1),
-                self.button('닫기',self.close),
-            )
+            ordering=self.button('보스 순서',lambda i:self.go(i,route('boss_order',boss_id=r.get('boss_id'))))
+            if getattr(self,'page_navigation',None):
+                total,page=self.page_navigation
+                return discord.ui.ActionRow(
+                    ordering,
+                    self.button('이전 파티',lambda i:self.go(i,{**r,'page':page-1},push=False),disabled=page==0),
+                    self.button('다음 파티',lambda i:self.go(i,{**r,'page':page+1},push=False),disabled=page>=total-1),
+                    self.button('관리 홈',self.home),self.button('닫기',self.close),
+                )
+            return discord.ui.ActionRow(self.button('뒤로',self.back,disabled=not self.history),ordering,
+                self.button('관리 홈',self.home),self.button('새로고침',lambda i:self.render(i)),self.button('닫기',self.close))
         return discord.ui.ActionRow(
             self.button('뒤로', self.back, disabled=not self.history),
             self.button('관리 홈', self.home),
@@ -248,7 +286,8 @@ class PanelSession:
         for k,v in filters.items():
             sql += f' AND {k}=?'
             args.append(v)
-        return [dict(r) for r in c.execute(sql+' ORDER BY id',args)]
+        ordering='sort_order,id' if table in ('bosses','boss_groups') else 'id'
+        return [dict(r) for r in c.execute(sql+' ORDER BY '+ordering,args)]
 
     def read_snapshot(self):
         # Read SQLite on a worker; construct Discord views on the running event loop.
@@ -278,7 +317,7 @@ class PanelSession:
         view = PanelLayout(self)
         self.page_navigation=None
         titles = {'home':'관리 홈','boss':'파티 관리','party':'파티 편집','owner':'소유자 선택',
-                  'characters':'캐릭터 관리','character':'캐릭터 상세','picker':'선택','confirm':'변경 확인','query':'조회'}
+                  'boss_order':'보스 순서','characters':'캐릭터 관리','character':'캐릭터 상세','picker':'선택','confirm':'변경 확인','query':'조회'}
         heading='# 메이플 보스 관리\n-# 관리 홈 › '+titles.get(r['kind'],'관리')
         if self.notice:heading+='\n'+safe(self.notice)[:700]
         view.add_item(discord.ui.TextDisplay(heading))
@@ -295,6 +334,8 @@ class PanelSession:
             self.build_boss(c,view)
         elif kind == 'party':
             self.build_party(c,view)
+        elif kind == 'boss_order':
+            self.build_boss_order(c,view)
         elif kind == 'owner':
             view.add_item(discord.ui.TextDisplay('## '+safe(r['title'])))
             select = discord.ui.UserSelect(placeholder='Discord 소유자를 선택하세요')
@@ -359,7 +400,7 @@ class PanelSession:
             destination=route('party',boss_id=bid,group_id=gid)
             controls=[self.button('편집',lambda i,d=destination:self.go(i,d),style=discord.ButtonStyle.primary),
                       self.button('삭제',lambda i,g=gid:self.mutate(i,'group.delete',{'id':g},route('boss',boss_id=bid)),style=discord.ButtonStyle.danger,disabled=data['status']!='active')]
-            view.add_item(party_card(self.bot,self.guild_id,group,data['max_members'],controls))
+            view.add_item(party_card(self.bot,self.guild_id,group,data['max_members'],controls,self.thumbnail_urls))
         if not data['groups']:
             view.add_item(discord.ui.TextDisplay('아직 파티가 없습니다. **＋ 파티 생성**으로 시작하세요.'))
         # Merge page navigation into bottom row to keep six-avatar parties under 40 components.
@@ -374,6 +415,41 @@ class PanelSession:
             await self.mutate(j,'group.add',{'boss_id':bid,'name':values[0] or None},route('boss',boss_id=bid))
         await self.form(i,'빈 파티 생성',[('파티명 (생략 가능)',False,None)],submit)
 
+    def build_boss_order(self,c,view):
+        r=self.current
+        bosses=self.rows(c,'bosses',status='active')
+        if not bosses:
+            view.add_item(discord.ui.TextDisplay('## 활성 보스가 없습니다'))
+            return
+        page=min(r['page'],max(0,(len(bosses)-1)//10))
+        ids=[b['id'] for b in bosses]
+        bid=r.get('boss_id') if r.get('boss_id') in ids else ids[0]
+        position=ids.index(bid)+1
+        self.current=r={**r,'page':page,'boss_id':bid}
+        selected=next(b for b in bosses if b['id']==bid)
+        listing='\n'.join(f'{index}. {safe(b["display_name"] or b["name"])} ({safe(b["difficulty"])})'
+                          for index,b in enumerate(bosses[page*10:page*10+10],page*10+1))
+        view.add_item(discord.ui.Container(discord.ui.TextDisplay('## 공개 배분표 보스 순서\n'+listing),accent_colour=0x65AD86))
+        async def choose(i,value):await self.go(i,{**r,'boss_id':value},push=False)
+        view.add_item(self.dropdown([dict(b,label=f'{index}. {b["name"]} ({b["difficulty"]})') for index,b in enumerate(bosses[page*10:page*10+10],page*10+1)],choose,'순서를 바꿀 보스'))
+        pending=c.execute('SELECT preparing_generation FROM guild_settings WHERE guild_id=?',(self.guild_id,)).fetchone()[0] is not None
+        text=f'선택: **{safe(selected["name"])}** · 현재 {position}/{len(bosses)}번째'
+        text+='\n게시 순서 반영·이전 작업 중입니다. 완료 후 다시 조정하세요.' if pending else '\n1이 가장 위입니다. 변경 확인 후 공개 게시물을 새 순서로 다시 만듭니다.'
+        view.add_item(discord.ui.TextDisplay(text))
+        async def move(i,target):
+            destination={**r,'page':(target-1)//10}
+            await self.mutate(i,'boss.order',{'id':bid,'position':target},destination)
+        async def specify(i):
+            async def submit(j,values):
+                await self.mutate(j,'boss.order',{'id':bid,'position':values[0]},r)
+            await self.form(i,'보스 위치 지정',[('위치 (1부터 시작)',True,str(position))],submit)
+        view.add_item(discord.ui.ActionRow(
+            self.button('위로',lambda i:move(i,position-1),disabled=pending or position==1),
+            self.button('아래로',lambda i:move(i,position+1),disabled=pending or position==len(bosses)),
+            self.button('위치 직접 지정',specify,modal=True,disabled=pending),
+        ))
+        view.add_item(self.pager(len(bosses),10))
+
     def build_party(self,c,view):
         r=self.current
         group=self.load(c,'boss_groups',r['group_id'])
@@ -381,7 +457,7 @@ class PanelSession:
         card=next((g for g in data['groups'] if g['id']==group['id']),None)
         if not card:raise UserError('삭제된 파티입니다.')
         view.add_item(discord.ui.TextDisplay('## '+safe(data['name'])+' · 파티 편집'))
-        view.add_item(party_card(self.bot,self.guild_id,card,data['max_members']))
+        view.add_item(party_card(self.bot,self.guild_id,card,data['max_members'],thumbnails=self.thumbnail_urls))
         active=data['status']=='active'
         view.add_item(discord.ui.ActionRow(
             self.button('＋ 캐릭터 추가',lambda i:self.pick_member(i,'add'),disabled=not active),
@@ -449,7 +525,7 @@ class PanelSession:
         member={**ch,'job_name':job['name'],'job_active':job['active'],
                 'display_name':owner['display_name'] if owner else '', 'membership':owner['membership'] if owner else 'unknown'}
         view.add_item(discord.ui.Container(discord.ui.Section(discord.ui.TextDisplay(member_text(member)),
-            accessory=discord.ui.Thumbnail(avatar_url(self.bot,self.guild_id,ch['owner_id']))),
+            accessory=discord.ui.Thumbnail(self.thumbnail_urls.get(ch['id']) or avatar_url(self.bot,self.guild_id,ch['owner_id']))),
             discord.ui.TextDisplay('활성 캐릭터' if ch['active'] else '비활성 캐릭터'),accent_colour=0x65AD86))
         view.add_item(discord.ui.ActionRow(
             self.button('이름·헥환 수정',self.edit_character,modal=True),self.button('직업 수정',self.edit_job),

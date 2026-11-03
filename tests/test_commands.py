@@ -17,7 +17,7 @@ class CommandTests(unittest.IsolatedAsyncioTestCase):
             for command in payload:
                 self.assertFalse(command['dm_permission'])
                 self.assertEqual(command['contexts'],[0])
-            self.assertEqual(sum(len(c.get('options',[])) if c['name']!='내보스' else 1 for c in payload),35)
+            self.assertEqual(sum(len(c.get('options',[])) if c['name']!='내보스' else 1 for c in payload),36)
             chars={o['name']:o for o in groups['캐릭터']['options']}
             edit={o['name']:o for o in chars['수정']['options']}
             self.assertIn('헥환초기화',edit)

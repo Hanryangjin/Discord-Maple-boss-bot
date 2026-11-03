@@ -12,7 +12,7 @@ def boss_data(c, guild_id, boss_id):
     result['groups'] = []
     for group in c.execute("SELECT * FROM boss_groups WHERE guild_id=? AND boss_id=? AND status='active' ORDER BY sort_order,id", (guild_id, boss_id)):
         item = dict(group)
-        item['members'] = [dict(row) for row in c.execute('''SELECT ch.id,ch.name,ch.owner_id,ch.hexa_value,
+        item['members'] = [dict(row) for row in c.execute('''SELECT ch.id,ch.name,ch.owner_id,ch.hexa_value,ch.job_id,j.icon_key AS job_icon_key,
             j.name AS job_name,j.active AS job_active,u.display_name,u.membership
             FROM group_members m JOIN characters ch ON ch.id=m.character_id
             JOIN jobs j ON j.id=ch.job_id LEFT JOIN discord_users u
@@ -40,13 +40,13 @@ def avatar_url(bot, guild_id, owner_id):
     return f'https://cdn.discordapp.com/embed/avatars/{(owner_id >> 22) % 6}.png'
 
 
-def party_pages(groups):
-    """Reserve 16 of the 40 components for headings, selectors and navigation."""
+def party_pages(groups, *, component_budget=24, text_budget=2800):
+    """Private panels reserve navigation space; public boards use a larger budget."""
     result, batch, count, length = [], [], 0, 0
     for group in groups:
-        cost = 6 + max(1, len(group['members'])) * 3
+        cost = 6 + len(group['members']) * 3 if group['members'] else 7
         text_cost = len(group['name']) * 2 + sum(len(member_text(m)) for m in group['members']) + 100
-        if batch and (count + cost > 24 or length + text_cost > 2800):
+        if batch and (count + cost > component_budget or length + text_cost > text_budget):
             result.append(batch)
             batch, count, length = [], 0, 0
         batch.append(group)
@@ -57,14 +57,15 @@ def party_pages(groups):
     return result
 
 
-def party_card(bot, guild_id, group, maximum, controls=None):
+def party_card(bot, guild_id, group, maximum, controls=None, thumbnails=None):
     card = discord.ui.Container(accent_colour=0x65AD86)
     card.add_item(discord.ui.TextDisplay(f'## {safe(group["name"])}　{len(group["members"])}/{maximum}명'))
     card.add_item(discord.ui.Separator())
     for member in group['members']:
         card.add_item(discord.ui.Section(
             discord.ui.TextDisplay(member_text(member)),
-            accessory=discord.ui.Thumbnail(avatar_url(bot, guild_id, member['owner_id']), description='소유자 Discord 아바타'),
+            accessory=discord.ui.Thumbnail((thumbnails or {}).get(member['id']) or avatar_url(bot, guild_id, member['owner_id']),
+                description='직업 SD 얼굴 아이콘과 Discord 아바타' if (thumbnails or {}).get(member['id']) else '소유자 Discord 아바타'),
         ))
     if not group['members']:
         card.add_item(discord.ui.TextDisplay('아직 구성원이 없습니다. 편집에서 캐릭터를 추가하세요.'))

@@ -77,21 +77,24 @@ class PublicAction(discord.ui.DynamicItem[discord.ui.Button], template=PATTERN):
             await report(i,error)
 
 
-def board_layout(bot, body, marker):
+def board_layout(bot, body, marker, thumbnails=None):
     view=discord.ui.LayoutView(timeout=None)
     identity=parse_marker(marker)
-    title='# '+safe(body['title'])
-    if body.get('page_count',1)>1:
-        title+=f'\n-# {body["page"]+1}/{body["page_count"]}페이지 · 전체 {body["group_count"]}개 파티'
+    continuation=body.get('page',0)>0
+    title=('-# ' if continuation else '# ')+safe(body['title'])
+    if continuation:
+        title+=' · 계속'
+    elif 'group_count' in body:
+        title+=f'\n-# 전체 {body["group_count"]}개 파티'
     view.add_item(discord.ui.TextDisplay(title))
     if 'cards' in body:
         for group in body['cards']:
             controls=[PublicAction(*identity,'edit',group['id']),PublicAction(*identity,'delete',group['id'])] if identity else None
-            view.add_item(party_card(bot,identity[0],group,body['max_members'],controls))
+            view.add_item(party_card(bot,identity[0],group,body['max_members'],controls,thumbnails))
         if not body['cards']:
             view.add_item(discord.ui.Container(discord.ui.TextDisplay('## 파티 0개\n관리 패널에서 첫 파티를 생성하세요.'),accent_colour=0x65AD86))
     else:
         view.add_item(discord.ui.Container(discord.ui.TextDisplay(body['description'][:3000]),accent_colour=0x65AD86))
-    if identity:
+    if identity and body.get('page',0)==body.get('page_count',1)-1:
         view.add_item(discord.ui.ActionRow(PublicAction(*identity,'manage'),PublicAction(*identity,'mine')))
     return validate_layout(view)
