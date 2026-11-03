@@ -121,9 +121,18 @@ class DiscordTransport:
     async def send(self, channel_id, body, marker):
         try:
             channel = await self.channel(channel_id)
-            from .public_ui import board_layout
-            message = await channel.send(allowed_mentions=discord.AllowedMentions.none(), view=board_layout(self.bot,body,marker))
-            return message.id
+            from .public_ui import board_layout, parse_marker
+            from .thumbnails import prepare_thumbnails
+            identity=parse_marker(marker)
+            members=[m for group in body.get('cards',[]) for m in group['members']]
+            prepared=await prepare_thumbnails(self.bot,identity[0] if identity else 0,members)
+            try:
+                message = await channel.send(allowed_mentions=discord.AllowedMentions.none(),
+                    view=board_layout(self.bot,body,marker,prepared.urls),
+                    **({'files':prepared.files} if prepared.files else {}))
+                return message.id
+            finally:
+                prepared.close()
         except discord.Forbidden as e:
             raise PermissionError('send forbidden') from e
 
@@ -133,10 +142,18 @@ class DiscordTransport:
             message = await channel.fetch_message(mid)
             if message.author.id != self.bot.user.id:
                 raise PermissionError('message owner mismatch')
-            from .public_ui import board_layout
-            await message.edit(content=None, embeds=[],
-                               allowed_mentions=discord.AllowedMentions.none(), view=board_layout(self.bot,body,marker))
-            return True
+            from .public_ui import board_layout, parse_marker
+            from .thumbnails import prepare_thumbnails
+            identity=parse_marker(marker)
+            members=[m for group in body.get('cards',[]) for m in group['members']]
+            prepared=await prepare_thumbnails(self.bot,identity[0] if identity else 0,members)
+            try:
+                await message.edit(content=None, embeds=[], attachments=prepared.files,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                    view=board_layout(self.bot,body,marker,prepared.urls))
+                return True
+            finally:
+                prepared.close()
         except discord.NotFound:
             return False
         except discord.Forbidden as e:
@@ -215,6 +232,8 @@ class MapleBot(commands.Bot):
         super().__init__(command_prefix=commands.when_mentioned, intents=intents,
                          allowed_mentions=discord.AllowedMentions.none(), proxy=os.getenv('DISCORD_PROXY') or None)
         self.service = Service(db)
+        from .thumbnails import ThumbnailComposer
+        self.thumbnails = ThumbnailComposer(self)
         self.worker = BoardWorker(self.service, DiscordTransport(self))
         self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False)
         self.tree.allowed_installs = app_commands.AppInstallationType(guild=True, user=False)
@@ -242,6 +261,7 @@ class MapleBot(commands.Bot):
         for task in self.background:
             task.cancel()
         await asyncio.gather(*self.background, return_exceptions=True)
+        await self.thumbnails.close()
         await super().close()
 
     async def run_worker(self):
@@ -312,6 +332,24 @@ class MapleBot(commands.Bot):
 
     async def on_member_update(self, before, after):
         await asyncio.to_thread(self.service.observe_member, after.guild.id, after.id, after.display_name, 'present')
+        if before.display_avatar != after.display_avatar:
+            await self.avatar_changed(after.id,after.guild.id)
+
+    async def avatar_changed(self, user_id, guild_id=None):
+        def dirty():
+            with self.service.db.transaction() as c:
+                query='SELECT DISTINCT guild_id FROM characters WHERE owner_id=?'
+                args=[user_id]
+                if guild_id is not None:
+                    query+=' AND guild_id=?'
+                    args.append(guild_id)
+                for row in c.execute(query,args).fetchall():
+                    self.service.touch(c,row[0])
+        await asyncio.to_thread(dirty)
+
+    async def on_user_update(self, before, after):
+        if before.display_avatar != after.display_avatar:
+            await self.avatar_changed(after.id)
 
     async def on_member_join(self, member):
         await asyncio.to_thread(self.service.observe_member, member.guild.id, member.id, member.display_name, 'present')
@@ -541,15 +579,20 @@ class MapleCommands(commands.Cog):
     @app_commands.choices(상태=BOSS_STATES)
     async def boss_list(self, i: discord.Interaction, 상태: str='active'):
         rows = await asyncio.to_thread(self.bot.service.rows, actor(i).guild_id, 'bosses', actor=actor(i), state=상태)
-        await send_pages(i, pages('보스 목록', [f'{safe(r["name"])} ({safe(r["difficulty"])}) · 정원 {r["max_members"]} · {r["status"]}' for r in rows]))
+        await send_pages(i, pages('보스 목록', [f'{index}. {safe(r["name"])} ({safe(r["difficulty"])}) · 정원 {r["max_members"]} · {r["status"]}' for index,r in enumerate(rows,1)]))
 
     @bosses.command(name='수정', description='보스 속성과 정원 수정')
     @app_commands.autocomplete(보스=ac_boss)
     async def boss_edit(self, i: discord.Interaction, 보스: str, 이름: str|None=None, 난이도: str|None=None,
-                        표시이름: str|None=None, 표시순서: int|None=None, 최대인원: app_commands.Range[int,1,6]|None=None):
+                        표시이름: str|None=None, 표시순서: app_commands.Range[int,1]|None=None, 최대인원: app_commands.Range[int,1,6]|None=None):
         p = {'id': entity_id(보스)}
         p.update({k:v for k,v in [('name',이름),('difficulty',난이도),('display_name',표시이름),('sort_order',표시순서),('max_members',최대인원)] if v is not None})
         await self.bot.mutate(i, 'boss.edit', p)
+
+    @bosses.command(name='순서', description='공개 배분표에서 보스의 위치 변경 (1부터 시작)')
+    @app_commands.autocomplete(보스=ac_boss)
+    async def boss_order(self, i: discord.Interaction, 보스: str, 위치: app_commands.Range[int,1]):
+        await self.bot.mutate(i,'boss.order',{'id':entity_id(보스),'position':위치})
 
     @bosses.command(name='비활성화', description='보스 운영 중단, 배정 보존')
     @app_commands.autocomplete(보스=ac_boss)

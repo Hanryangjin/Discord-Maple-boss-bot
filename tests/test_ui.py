@@ -65,6 +65,8 @@ class UIIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.bot=MapleBot(Database(str(Path(self.tmp.name)/'db.sqlite3')))
         self.bot.observe=AsyncMock()  # Members are already verified in the fixture.
+        from tests.test_thumbnails import png
+        self.bot.thumbnails.reader=AsyncMock(return_value=png('blue'))
         self.service=self.bot.service
         self.a=Actor(1,10,True)
         for uid in range(10,30):self.service.observe_member(1,uid,f'user{uid}','present')
@@ -319,3 +321,34 @@ class UIIntegrationTests(unittest.IsolatedAsyncioTestCase):
         transport.delete=AsyncMock()
         self.assertEqual(await transport.find(100,marker),101)
         transport.delete.assert_awaited_once_with(100,102)
+
+    async def test_boss_order_screen_moves_and_confirms_in_the_same_root(self):
+        self.do('boss.add',{'name':'다른보스','difficulty':'하드'})
+        other=next(r['id'] for r in self.service.rows(1,'bosses',actor=self.a) if r['name']=='다른보스')
+        session=PanelSession(self.bot,10,1,route('boss',boss_id=other))
+        await session.start(self.i())
+        await self.click(session,'보스 순서')
+        self.assertEqual(session.current['kind'],'boss_order')
+        await self.click(session,'위로')
+        self.assertEqual(session.current['kind'],'confirm')
+        self.assertIn('기존 메시지 링크',str(session.view.to_components()))
+        await self.click(session,'확인하고 실행')
+        self.assertEqual(session.current['kind'],'boss_order')
+        self.assertEqual(self.service.rows(1,'bosses',actor=self.a)[0]['id'],other)
+        self.assertTrue(button(session.view,'위로').disabled)
+        form=await self.click(session,'위치 직접 지정')
+        form.response.modal.inputs[0]._value='2'
+        submitted=self.i();await form.response.modal.on_submit(submitted)
+        await self.click(session,'확인하고 실행')
+        self.assertEqual(self.service.rows(1,'bosses',actor=self.a)[1]['id'],other)
+        self.assertTrue(all(update['content'] is None for update in self.root.edits))
+        submitted.followup.send.assert_not_awaited()
+
+    async def test_boss_order_buttons_disabled_during_publication(self):
+        self.do('settings.channel',{'value':100})
+        self.do('board.publish',{})
+        session=PanelSession(self.bot,10,1,route('boss_order',boss_id=self.bid))
+        await session.start(self.i())
+        for label in ('위로','아래로','위치 직접 지정'):
+            self.assertTrue(button(session.view,label).disabled)
+        self.assertIn('반영·이전 작업 중',str(session.view.to_components()))

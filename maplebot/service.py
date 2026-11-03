@@ -17,7 +17,7 @@ class Actor:
 
 
 CONFIRM = {'character.add', 'character.owner', 'boss.delete', 'group.delete', 'group.merge',
-           'job.rename', 'job.deactivate', 'board.publish', 'board.stop'}
+           'job.rename', 'job.deactivate', 'board.publish', 'board.stop', 'boss.order'}
 ADMIN = {'settings.role', 'settings.channel', 'boss.delete', 'boss.restore',
          'job.add', 'job.rename', 'job.activate', 'job.deactivate'}
 OWN = {'character.add', 'character.edit', 'character.activate', 'character.deactivate'}
@@ -116,7 +116,7 @@ class Service:
                 result = self.apply(c, actor, action, dict(payload))
                 after = self.snapshot(c, actor.guild_id)
                 changed = before != after or action.startswith(('settings.', 'board.'))
-                if action in CONFIRM and not confirmation and changed:
+                if (action in CONFIRM or (action=='boss.edit' and 'sort_order' in payload)) and not confirmation and changed:
                     c.execute('ROLLBACK TO preview')
                     c.execute('RELEASE preview')
                     token = uuid.uuid4().hex
@@ -184,6 +184,52 @@ class Service:
         c.execute('INSERT INTO group_members VALUES(?,?,?,?,?,?)',
                   (guild, boss['id'], group['cycle_id'], group_id, char_id, time.time()))
         c.execute('UPDATE boss_groups SET version=version+1 WHERE id=?', (group_id,))
+
+    def normalize_boss_order(self,c,guild,ids=None):
+        if ids is None:
+            ids=[r[0] for r in c.execute("SELECT id FROM bosses WHERE guild_id=? AND status='active' ORDER BY sort_order,id",(guild,))]
+        for position,bid in enumerate(ids,1):
+            c.execute('UPDATE bosses SET sort_order=?,version=version+1 WHERE guild_id=? AND id=? AND sort_order<>?',
+                      (position,guild,bid,position))
+
+    def begin_publication(self,c,guild,channel,kind='publish'):
+        settings=c.execute('SELECT * FROM guild_settings WHERE guild_id=?',(guild,)).fetchone()
+        if settings['preparing_generation'] is not None:
+            raise UserError('게시 준비·이전 작업이 진행 중입니다. 완료 후 다시 시도해 주세요.')
+        generation=settings['generation_counter']+1
+        c.execute('INSERT INTO board_generations VALUES(?,?,?,?,?,NULL)',(guild,generation,channel,'preparing',time.time()))
+        c.execute('UPDATE guild_settings SET generation_counter=?,preparing_generation=? WHERE guild_id=?',(generation,generation,guild))
+        c.execute("INSERT INTO board_jobs(guild_id,generation,kind,state,created_at) VALUES(?,?,?,'pending',?)",(guild,generation,kind,time.time()))
+        return generation
+
+    def reorder_boss(self,c,guild,boss_id,position):
+        self.active_boss(c,guild,boss_id)
+        rows=c.execute("SELECT id,name,difficulty FROM bosses WHERE guild_id=? AND status='active' ORDER BY sort_order,id",(guild,)).fetchall()
+        try:
+            text=str(position).strip()
+            if isinstance(position,bool) or not text.isascii() or not text.isdecimal():raise ValueError
+            value=int(text)
+        except (TypeError,ValueError):
+            raise UserError('보스 위치는 1부터 시작하는 정수로 입력해 주세요.')
+        if not 1<=value<=len(rows):
+            raise UserError(f'보스 위치는 1~{len(rows)} 사이여야 합니다.')
+        original=[r['id'] for r in rows]
+        desired=[bid for bid in original if bid!=boss_id]
+        desired.insert(value-1,boss_id)
+        if desired==original:
+            return '보스 정보를 저장합니다. 현재 표시 순서는 유지합니다.'
+        if desired!=original:
+            settings=c.execute('SELECT * FROM guild_settings WHERE guild_id=?',(guild,)).fetchone()
+            if settings['preparing_generation'] is not None:
+                raise UserError('게시 준비·이전 작업이 진행 중입니다. 완료 후 순서를 변경해 주세요.')
+            if settings['active_generation'] is not None:
+                channel=c.execute('SELECT channel_id FROM board_generations WHERE guild_id=? AND generation=?',(guild,settings['active_generation'])).fetchone()[0]
+                self.begin_publication(c,guild,channel,'reorder')
+        self.normalize_boss_order(c,guild,desired)
+        names={r['id']:f'{r["name"]} ({r["difficulty"]})' for r in rows}
+        listing='\n'.join(f'{index}. {names[bid]}' for index,bid in enumerate(desired,1))
+        return ('보스 표시 순서를 변경합니다.\n'+listing[:1400]+
+                '\n게시 중이면 새 순서로 다시 게시한 뒤 이전 게시물을 정리합니다. 기존 메시지 링크는 변경됩니다.')
 
     def apply(self, c, a, action, p):
         g = a.guild_id
@@ -272,8 +318,14 @@ class Service:
                     raise UserError('정원은 1~6명입니다.')
                 c.execute('INSERT INTO bosses(guild_id,name,name_key,difficulty,difficulty_key,max_members) VALUES(?,?,?,?,?,?)',
                           (g, name, key(name), diff, key(diff), maximum))
+                new_id=c.execute('SELECT last_insert_rowid()').fetchone()[0]
+                rank=c.execute("SELECT COALESCE(MAX(sort_order),0)+1 FROM bosses WHERE guild_id=? AND status='active' AND id<>?",(g,new_id)).fetchone()[0]
+                c.execute('UPDATE bosses SET sort_order=? WHERE id=?',(rank,new_id))
+                self.normalize_boss_order(c,g)
                 return f'{name} ({diff}) 보스를 파티 0개로 등록했습니다.'
             boss = self.get(c, g, 'bosses', p['id'])
+            if op == 'order':
+                return self.reorder_boss(c,g,boss['id'],p['position'])
             if op == 'edit':
                 self.active_boss(c, g, boss['id'])
                 changes = {}
@@ -282,7 +334,7 @@ class Service:
                         changes[field] = label(p[field], limit)
                         if field != 'display_name':
                             changes[field+'_key'] = key(changes[field])
-                for field in ('max_members', 'sort_order'):
+                for field in ('max_members',):
                     if field in p:
                         changes[field] = int(p[field])
                 maximum = changes.get('max_members', boss['max_members'])
@@ -293,11 +345,13 @@ class Service:
                     GROUP BY gr.id HAVING COUNT(m.character_id)>?''', (g, boss['id'], maximum)).fetchall()
                 if full:
                     raise UserError('정원 변경 불가: '+', '.join(f'{r["name"]} {r["n"]}명' for r in full)+' — 먼저 수동 정리해 주세요.')
-                if not changes:
+                if not changes and 'sort_order' not in p:
                     raise UserError('수정할 항목을 지정해 주세요.')
                 changes = {k: v for k, v in changes.items() if boss[k] != v}
                 if changes:
                     c.execute('UPDATE bosses SET '+','.join(f'{k}=?' for k in changes)+',version=version+1 WHERE id=?', (*changes.values(), boss['id']))
+                if 'sort_order' in p:
+                    return self.reorder_boss(c,g,boss['id'],p['sort_order'])
             elif op in ('activate', 'deactivate', 'delete', 'restore'):
                 if op == 'restore' and boss['status'] != 'deleted':
                     raise UserError('삭제된 보스만 복구할 수 있습니다.')
@@ -305,7 +359,11 @@ class Service:
                     raise UserError('삭제된 보스는 보스 복구를 사용해 주세요.')
                 status = {'activate': 'active', 'deactivate': 'inactive', 'delete': 'deleted', 'restore': 'inactive'}[op]
                 if status != boss['status']:
+                    if status=='active':
+                        rank=c.execute("SELECT COALESCE(MAX(sort_order),0)+1 FROM bosses WHERE guild_id=? AND status='active'",(g,)).fetchone()[0]
+                        c.execute('UPDATE bosses SET sort_order=? WHERE id=?',(rank,boss['id']))
                     c.execute('UPDATE bosses SET status=?,version=version+1 WHERE id=?', (status, boss['id']))
+                    self.normalize_boss_order(c,g)
                     if op == 'delete':
                         c.execute('DELETE FROM group_members WHERE guild_id=? AND boss_id=?', (g, boss['id']))
                         c.execute("UPDATE boss_groups SET status='deleted',version=version+1 WHERE guild_id=? AND boss_id=? AND status='active'", (g, boss['id']))
@@ -376,10 +434,7 @@ class Service:
                     current = c.execute('SELECT channel_id FROM board_generations WHERE guild_id=? AND generation=?', (g, active)).fetchone()[0]
                     if current == channel:
                         return '현재 파티 배분표 갱신을 요청했습니다.'
-                generation = settings['generation_counter'] + 1
-                c.execute('INSERT INTO board_generations VALUES(?,?,?,?,?,NULL)', (g, generation, channel, 'preparing', time.time()))
-                c.execute('UPDATE guild_settings SET generation_counter=?,preparing_generation=? WHERE guild_id=?', (generation, generation, g))
-                c.execute("INSERT INTO board_jobs(guild_id,generation,kind,state,created_at) VALUES(?,?,'publish','pending',?)", (g, generation, time.time()))
+                self.begin_publication(c,g,channel)
                 return f'<#{channel}>에 파티 배분표 게시·이전을 준비합니다.'
             if op == 'stop':
                 for generation in (settings['active_generation'], settings['preparing_generation']):
@@ -419,6 +474,8 @@ class Service:
                 result = [r for r in result if r['status'] == 'active' and (boss_id is None or r['boss_id'] == boss_id)]
                 bosses = {r['id']: r for r in self.snapshot(c, guild)['bosses']}
                 result = [r for r in result if manager or bosses[r['boss_id']]['status'] == 'active']
+            if table in ('bosses','boss_groups'):
+                result.sort(key=lambda row:(row['sort_order'],row['id']))
             return result
 
     def settings(self, actor):

@@ -44,7 +44,7 @@ def boss_pages(c, guild, boss_id, *, public=True):
     if public:
         from .cards import boss_data, party_pages, member_text
         data = boss_data(c, guild, boss_id)
-        batches = party_pages(data['groups'])
+        batches = party_pages(data['groups'], component_budget=36, text_budget=3400)
         rendered = []
         for index, batch in enumerate(batches):
             lines = []

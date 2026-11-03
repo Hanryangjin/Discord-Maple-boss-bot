@@ -6,3 +6,7 @@ __pycache__/
 var/
 .coverage
 .pytest_cache/
+assets/characters/*
+!assets/characters/README.md
+assets/jobs/*
+!assets/jobs/README.md

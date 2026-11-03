@@ -7,13 +7,14 @@ name = "maple-party-bot"
 version = "0.1.0"
 description = "Discord MapleStory boss party management"
 requires-python = ">=3.11"
-dependencies = ["discord.py==2.6.4"]
+dependencies = ["discord.py==2.6.4", "Pillow==13.0.0"]
 
 [project.scripts]
 maplebot = "maplebot.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["maplebot*"]
+namespaces = false
 
 [tool.setuptools.package-data]
-maplebot = ["*.sql", "*.json"]
+maplebot = ["*.sql", "*.json", "resources/job_icons/*.json", "resources/job_icons/*.webp", "resources/job_icons/*.png", "resources/job_icons/*.md"]
