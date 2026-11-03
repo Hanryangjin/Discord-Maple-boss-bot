@@ -10,3 +10,14 @@ propcache==0.5.4
 typing_extensions==4.16.0
 yarl==1.25.1
 pillow==13.0.0
+
+# Native Windows Credential Manager; no keyring backend is installed on Linux.
+keyring==25.6.0; sys_platform == "win32"
+pywin32-ctypes==0.2.3; sys_platform == "win32"
+jaraco.classes==3.4.0; sys_platform == "win32"
+jaraco.context==6.0.1; sys_platform == "win32"
+jaraco.functools==4.1.0; sys_platform == "win32"
+more-itertools==10.5.0; sys_platform == "win32"
+importlib_metadata==8.5.0; sys_platform == "win32" and python_version < "3.12"
+zipp==3.21.0; sys_platform == "win32" and python_version < "3.12"
+backports.tarfile==1.2.0; sys_platform == "win32" and python_version < "3.12"
