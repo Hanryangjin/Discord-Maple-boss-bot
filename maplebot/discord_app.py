@@ -103,14 +103,14 @@ class Confirm(PrivateView):
         await i.response.edit_message(content='취소했습니다. 변경하지 않았습니다.', view=None, embed=None)
 
 
-class DiscordTransport:
+class LegacyDiscordTransport:
     def __init__(self, bot):
         self.bot = bot
 
     async def channel(self, channel_id):
         try:
             channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
-            if not isinstance(channel, discord.TextChannel):
+            if not isinstance(channel, (discord.TextChannel, discord.ForumChannel, discord.Thread)):
                 raise LookupError('unsupported channel')
             return channel
         except discord.NotFound as e:
@@ -122,13 +122,12 @@ class DiscordTransport:
         try:
             channel = await self.channel(channel_id)
             from .public_ui import board_layout, parse_marker
-            from .thumbnails import prepare_thumbnails
+            from .party_image import prepare_parties
             identity=parse_marker(marker)
-            members=[m for group in body.get('cards',[]) for m in group['members']]
-            prepared=await prepare_thumbnails(self.bot,identity[0] if identity else 0,members)
+            prepared=await prepare_parties(self.bot,identity[0] if identity else 0,body.get('cards',[]),body.get('max_members',6))
             try:
                 message = await channel.send(allowed_mentions=discord.AllowedMentions.none(),
-                    view=board_layout(self.bot,body,marker,prepared.urls),
+                    view=board_layout(self.bot,body,marker,party_images=prepared.urls),
                     **({'files':prepared.files} if prepared.files else {}))
                 return message.id
             finally:
@@ -143,14 +142,13 @@ class DiscordTransport:
             if message.author.id != self.bot.user.id:
                 raise PermissionError('message owner mismatch')
             from .public_ui import board_layout, parse_marker
-            from .thumbnails import prepare_thumbnails
+            from .party_image import prepare_parties
             identity=parse_marker(marker)
-            members=[m for group in body.get('cards',[]) for m in group['members']]
-            prepared=await prepare_thumbnails(self.bot,identity[0] if identity else 0,members)
+            prepared=await prepare_parties(self.bot,identity[0] if identity else 0,body.get('cards',[]),body.get('max_members',6))
             try:
                 await message.edit(content=None, embeds=[], attachments=prepared.files,
                     allowed_mentions=discord.AllowedMentions.none(),
-                    view=board_layout(self.bot,body,marker,prepared.urls))
+                    view=board_layout(self.bot,body,marker,party_images=prepared.urls))
                 return True
             finally:
                 prepared.close()
@@ -203,6 +201,13 @@ class DiscordTransport:
         except discord.Forbidden as e:
             raise PermissionError('history forbidden') from e
         return None
+
+
+from .forum import ForumTransportMixin
+
+
+class DiscordTransport(ForumTransportMixin, LegacyDiscordTransport):
+    pass
 
 
 class BoardView(discord.ui.View):
@@ -387,11 +392,13 @@ class MapleBot(commands.Bot):
             cid = payload.get('channel_id') or settings['last_channel_id'] or settings['default_channel_id']
             if cid:
                 channel = i.guild.get_channel(cid)
-                if not isinstance(channel, discord.TextChannel):
-                    raise UserError('현재 서버의 일반 텍스트 채널을 선택해 주세요.')
+                if not isinstance(channel, (discord.TextChannel,discord.ForumChannel)):
+                    raise UserError('현재 서버의 텍스트 또는 포럼 채널을 선택해 주세요.')
                 perm = channel.permissions_for(i.guild.me)
-                if not (perm.view_channel and perm.send_messages and perm.embed_links and perm.read_message_history):
-                    raise UserError('게시 채널의 보기·전송·Embed·메시지 기록 읽기 권한이 필요합니다.')
+                if isinstance(channel,discord.ForumChannel) and channel.flags.require_tag:
+                    raise UserError('자동 게시를 위해 포럼의 필수 태그 설정을 해제해 주세요.')
+                if not (perm.view_channel and perm.send_messages and perm.embed_links and perm.read_message_history and perm.attach_files and (not isinstance(channel,discord.ForumChannel) or (perm.send_messages_in_threads and perm.manage_threads))):
+                    raise UserError('게시 채널의 보기·전송·Embed·파일 첨부·기록 읽기 권한이 필요합니다. 포럼은 스레드 메시지 전송·스레드 관리 권한도 필요합니다.')
         return await asyncio.to_thread(self.service.execute, a, action, payload, token)
 
     async def mutate(self, i, action, payload, token=None):
@@ -532,7 +539,7 @@ class MapleCommands(commands.Cog):
         await self.bot.mutate(i, 'settings.role', {'value': 역할.id})
 
     @settings.command(name='파티배분표채널', description='기본 게시 채널 지정 (서버 관리자)')
-    async def channel(self, i: discord.Interaction, 채널: discord.TextChannel):
+    async def channel(self, i: discord.Interaction, 채널: discord.TextChannel|discord.ForumChannel):
         await self.bot.mutate(i, 'settings.channel', {'value': 채널.id})
 
     @settings.command(name='조회', description='설정과 게시 작업·오류 상태 조회')
@@ -713,7 +720,7 @@ class MapleCommands(commands.Cog):
         await self.bot.mutate(i,'group.merge',{'id':entity_id(원본파티),'target_id':entity_id(대상파티)})
 
     @boards.command(name='게시', description='공개 파티 배분표 게시·재개·채널 이전')
-    async def board_publish(self, i: discord.Interaction, 채널: discord.TextChannel|None=None):
+    async def board_publish(self, i: discord.Interaction, 채널: discord.TextChannel|discord.ForumChannel|None=None):
         await self.bot.mutate(i,'board.publish',{'channel_id':채널.id} if 채널 else {})
 
     @boards.command(name='중단', description='자동 갱신 중단과 기존 게시물 정리')

@@ -29,21 +29,20 @@ def fake_bot(urls=None):
 
 
 class CompositionTests(unittest.TestCase):
-    def test_relative_sizes_positions_and_transparency(self):
-        image=decode(compose(png('red'),png('blue')))
-        self.assertEqual(image.size,(200,128))
-        self.assertEqual(image.getpixel((20,80)),(255,0,0,255))  # Small character on left.
-        self.assertEqual(image.getpixel((136,64)),(0,0,255,255))  # Large avatar on right.
-        self.assertEqual(image.getpixel((0,0))[3],0)
-        self.assertEqual(image.getpixel((80,8))[3],0)  # Circular avatar corner.
-        red=sum(1 for y in range(128) for x in range(200) if image.getpixel((x,y))==(255,0,0,255))
-        blue=sum(1 for y in range(128) for x in range(200) if image.getpixel((x,y))==(0,0,255,255))
-        self.assertGreater(blue,red*2)
+    def test_square_icon_preserves_full_image(self):
+        source=Image.new('RGBA',(160,80),'red')
+        source.putpixel((0,40),(0,255,0,255))
+        source.putpixel((159,40),(0,0,255,255))
+        out=io.BytesIO();source.save(out,format='PNG')
+        image=decode(compose(out.getvalue()))
+        self.assertEqual(image.size,(96,96))
+        self.assertEqual(image.getpixel((48,48)),(255,0,0,255))
+        self.assertEqual(image.getpixel((48,0))[3],0)
+        self.assertGreater(image.getpixel((0,48))[1],0)
+        self.assertGreater(image.getpixel((95,48))[2],0)
 
-    def test_corrupt_avatar_has_placeholder_and_corrupt_icon_is_rejected(self):
-        self.assertEqual(decode(compose(png('red'),b'not an avatar')).size,(200,128))
-        self.assertEqual(decode(compose(png('red'),None)).size,(200,128))
-        with self.assertRaises(OSError):compose(b'broken',png('blue'))
+    def test_corrupt_icon_is_rejected(self):
+        with self.assertRaises(OSError):compose(b'broken')
 
     def test_image_size_limits(self):
         with self.assertRaises(ValueError):decode(b'x'*(MAX_BYTES+1))
@@ -60,14 +59,16 @@ class ComposerTests(unittest.IsolatedAsyncioTestCase):
         self.member={'id':1,'name':'캐릭터','owner_id':10,'job_id':1,'job_icon_key':None}
         self.urls={10:'https://cdn.discordapp.com/avatars/10/first.png'}
         self.reader=AsyncMock(return_value=png('blue'))
-        self.composer=ThumbnailComposer(fake_bot(self.urls),self.root,reader=self.reader)
+        self.bot=fake_bot(self.urls)
+        self.bot.http=SimpleNamespace(get_from_cdn=self.reader)
+        self.composer=ThumbnailComposer(self.bot,self.root)
 
     async def asyncTearDown(self):await self.composer.close()
 
     async def test_prepare_attaches_png_and_reuses_cache_with_fresh_files(self):
         first=await self.composer.prepare(1,[self.member])
         self.assertTrue(first.urls[1].startswith('attachment://character-1-'))
-        self.assertEqual(decode(first.files[0].fp.read()).size,(200,128))
+        self.assertEqual(decode(first.files[0].fp.read()).size,(96,96))
         first.close()
         second=await self.composer.prepare(1,[self.member])
         self.assertEqual(first.urls,second.urls)
@@ -75,62 +76,51 @@ class ComposerTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(second.files[0].fp.closed)
         self.assertIsNot(first.files[0],second.files[0])
         second.close()
-        self.reader.assert_awaited_once()
+        self.reader.assert_not_awaited()
         self.assertEqual(len(self.composer.image_cache),1)
 
-    async def test_avatar_change_and_icon_change_invalidate_output(self):
+    async def test_avatar_change_is_ignored_and_icon_change_invalidates_output(self):
         first=await self.composer.prepare(1,[self.member]);first.close()
         self.urls[10]='https://cdn.discordapp.com/avatars/10/second.png'
-        self.reader.return_value=png('green')
         second=await self.composer.prepare(1,[self.member]);second.close()
-        self.assertNotEqual(first.urls,second.urls)
+        self.assertEqual(first.urls,second.urls)
         self.icon.write_bytes(png('yellow'))
         third=await self.composer.prepare(1,[self.member]);third.close()
         self.assertNotEqual(second.urls,third.urls)
-        self.assertEqual(self.reader.await_count,2)
+        self.reader.assert_not_awaited()
 
-    async def test_missing_icon_uses_common_placeholder_with_avatar(self):
+    async def test_missing_icon_uses_common_placeholder_without_avatar(self):
         self.icon.unlink()
         result=await self.composer.prepare(1,[self.member])
         self.assertIn(1,result.urls)
         self.assertEqual(len(result.files),1)
-        self.reader.assert_awaited_once()
+        self.assertEqual(decode(result.files[0].fp.read()).size,(96,96))
+        self.reader.assert_not_awaited()
         result.close()
 
-    async def test_corrupt_icon_and_failed_download_do_not_break_render(self):
+    async def test_corrupt_icon_does_not_break_render(self):
         self.icon.write_bytes(b'broken')
+        self.reader.side_effect=OSError('CDN must not be accessed')
         result=await self.composer.prepare(1,[self.member])
         self.assertEqual(len(result.files),1)
-        result.close()
-        self.icon.write_bytes(png('red'))
-        self.composer.avatar_cache.clear()
-        self.reader.side_effect=OSError('offline')
-        result=await self.composer.prepare(1,[self.member])
-        self.assertEqual(len(result.files),1)
-        self.assertEqual(decode(result.files[0].fp.read()).size,(200,128))
+        self.assertEqual(decode(result.files[0].fp.read()).size,(96,96))
+        self.reader.assert_not_awaited()
         result.close()
 
-    async def test_concurrent_characters_share_avatar_fetch(self):
+    async def test_concurrent_characters_do_not_fetch_avatars(self):
         (self.root/'1'/'2.png').write_bytes(png('green'))
-        async def slow(url):
-            await asyncio.sleep(0.01)
-            return png('blue')
-        self.reader.side_effect=slow
         result=await self.composer.prepare(1,[self.member,{'id':2,'name':'다른캐릭터','owner_id':10,'job_id':2,'job_icon_key':None}])
         self.assertEqual(len(result.files),2)
-        self.reader.assert_awaited_once()
+        self.reader.assert_not_awaited()
         result.close()
 
-    async def test_failure_cache_retries_after_expiration(self):
-        self.reader.side_effect=OSError('offline')
-        one=await self.composer.prepare(1,[self.member]);one.close()
-        two=await self.composer.prepare(1,[self.member]);two.close()
-        self.reader.assert_awaited_once()
-        self.composer.avatar_cache.clear()
-        self.reader.side_effect=None
-        self.reader.return_value=png('blue')
-        three=await self.composer.prepare(1,[self.member]);three.close()
-        self.assertNotEqual(two.urls,three.urls)
+    async def test_portrait_override_stays_square(self):
+        self.icon.write_bytes(png('yellow',(40,160)))
+        result=await self.composer.prepare(1,[self.member])
+        image=decode(result.files[0].fp.read())
+        self.assertEqual(image.size,(96,96))
+        self.assertEqual(image.getpixel((48,48)),(255,255,0,255))
+        result.close()
 
     async def test_attachment_limit_and_deduplication(self):
         with self.assertRaises(ValueError):
@@ -149,7 +139,8 @@ class MediaIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.bot=MapleBot(Database(str(self.root/'db.sqlite3')))
         self.bot.observe=AsyncMock()
         self.reader=AsyncMock(return_value=png('blue'))
-        self.bot.thumbnails=ThumbnailComposer(self.bot,self.root/'icons',reader=self.reader)
+        self.bot.http.get_from_cdn=self.reader
+        self.bot.thumbnails=ThumbnailComposer(self.bot,self.root/'icons')
         self.bot.thumbnails.root.mkdir()
         # Built-in job assets or the common placeholder are selected by job ID.
         self.a=Actor(1,10,True)
@@ -188,12 +179,12 @@ class MediaIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await transport.send(100,body,marker),101)
         self.assertTrue(await transport.edit(100,101,body,marker))
         self.assertEqual([r['files'] for r in records],[1,1])
-        self.assertTrue(all('attachment://character-' in r['components'] for r in records))
-        self.assertEqual(decode(records[0]['images'][0]).size,(200,128))
+        self.assertTrue(all('attachment://party-' in r['components'] for r in records))
+        self.assertEqual(decode(records[0]['images'][0]).size,(1120,282))
         await transport.edit(100,101,{'title':'운영 종료','description':'중단되었습니다.'},'maple:retired')
         self.assertEqual(records[-1]['files'],0)
         self.assertEqual(message.edit.call_args.kwargs['attachments'],[])
-        self.reader.assert_awaited_once()
+        self.reader.assert_not_awaited()
 
     async def test_private_panel_uses_one_message_and_removes_old_images_on_navigation(self):
         from maplebot.panel import PanelSession,route
@@ -209,8 +200,8 @@ class MediaIntegrationTests(unittest.IsolatedAsyncioTestCase):
         session=PanelSession(self.bot,10,1,route('boss',boss_id=self.bid))
         await session.start(i)
         self.assertEqual(len(uploaded),1)
-        self.assertIn('attachment://character-',str(session.view.to_components()))
-        self.assertEqual(decode(uploaded[0]).size,(200,128))
+        self.assertIn('attachment://party-',str(session.view.to_components()))
+        self.assertEqual(decode(uploaded[0]).size,(1120,282))
         j=Interaction(self.bot,root)
         await button(session.view,'관리 홈').callback(j)
         self.assertEqual(j.edit_original_response.call_args.kwargs['attachments'],[])

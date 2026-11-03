@@ -57,7 +57,21 @@ def party_pages(groups, *, component_budget=24, text_budget=2800):
     return result
 
 
-def party_card(bot, guild_id, group, maximum, controls=None, thumbnails=None):
+def image_party_card(group,maximum,url,controls=None):
+    card=discord.ui.Container(accent_colour=0x65AD86)
+    card.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(url,description=f"{group['name']} · {len(group['members'])}/{maximum}명")))
+    owners=[]
+    for member in group['members']:
+        who=f"<@{member['owner_id']}>" if member.get('membership')=='present' else safe(member.get('display_name') or '사용자')+(' (탈퇴)' if member.get('membership')=='left' else ' (소속 확인 불가)')
+        if who not in owners:owners.append(who)
+    card.add_item(discord.ui.TextDisplay('소유자: '+(' · '.join(owners) or '없음')))
+    if controls:card.add_item(discord.ui.ActionRow(*controls))
+    return card
+
+
+def party_card(bot, guild_id, group, maximum, controls=None, thumbnails=None, party_images=None):
+    if party_images and group["id"] in party_images:
+        return image_party_card(group,maximum,party_images[group["id"]],controls)
     card = discord.ui.Container(accent_colour=0x65AD86)
     card.add_item(discord.ui.TextDisplay(f'## {safe(group["name"])}　{len(group["members"])}/{maximum}명'))
     card.add_item(discord.ui.Separator())
@@ -65,7 +79,7 @@ def party_card(bot, guild_id, group, maximum, controls=None, thumbnails=None):
         card.add_item(discord.ui.Section(
             discord.ui.TextDisplay(member_text(member)),
             accessory=discord.ui.Thumbnail((thumbnails or {}).get(member['id']) or avatar_url(bot, guild_id, member['owner_id']),
-                description='직업 SD 얼굴 아이콘과 Discord 아바타' if (thumbnails or {}).get(member['id']) else '소유자 Discord 아바타'),
+                description='직업 SD 얼굴 아이콘' if (thumbnails or {}).get(member['id']) else '소유자 Discord 아바타'),
         ))
     if not group['members']:
         card.add_item(discord.ui.TextDisplay('아직 구성원이 없습니다. 편집에서 캐릭터를 추가하세요.'))
